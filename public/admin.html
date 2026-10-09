@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/admin.css?v=2">
+  <link rel="stylesheet" href="/css/admin.css?v=3">
 </head>
 <body class="admin-body">
 
@@ -24,6 +24,8 @@
       <button class="tab" data-view="products">Productos</button>
       <button class="tab" data-view="new">Agregar producto</button>
       <button class="tab" data-view="discounts">Descuentos</button>
+      <button class="tab" data-view="categories">Categorías</button>
+      <button class="tab" data-view="backup">Respaldo</button>
       <button class="tab" data-view="settings">Configuración</button>
     </nav>
     <div class="admin-actions">
@@ -89,6 +91,11 @@
         <button class="btn btn-gold btn-small" id="new-product-btn">+ Nuevo producto</button>
       </div>
 
+      <div class="filter-bar" id="products-filter-bar" hidden>
+        <span>Mostrando: <strong id="products-filter-name"></strong></span>
+        <button class="link-btn" id="products-filter-clear" type="button">Ver todos</button>
+      </div>
+
       <div class="table-wrap">
         <table class="admin-table">
           <thead>
@@ -127,6 +134,12 @@
             <div class="field">
               <label for="p-name">Nombre del producto</label>
               <input type="text" id="p-name" maxlength="120" required>
+            </div>
+            <div class="field">
+              <label for="p-category">Categoría</label>
+              <select id="p-category">
+                <option value="">Sin categoría</option>
+              </select>
             </div>
             <div class="field">
               <label for="p-description">Descripción</label>
@@ -209,6 +222,15 @@
           </div>
         </div>
 
+        <fieldset class="variants-card">
+          <legend>Variantes del producto</legend>
+          <p class="variants-hint">Grupos de opciones configurables para esta pieza, como el color del hilo, la talla del anillo o el material del dije. Los grupos obligatorios (<abbr title="Obligatorio">*</abbr>) deben elegirse antes de comprar.</p>
+          <div class="variant-groups" id="variant-groups">
+            <p class="empty-note variants-empty" id="variants-empty">Sin variantes. Añade grupos de color, talla u otra opción.</p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-small" id="variant-group-add">+ Añadir grupo</button>
+        </fieldset>
+
         <p class="form-error" id="product-error" hidden></p>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="product-cancel">Cancelar</button>
@@ -227,6 +249,53 @@
       </div>
       <div class="discounts-list" id="discounts-list"></div>
       <p class="empty-note" id="discounts-empty" hidden>Aún no hay productos para descontar.</p>
+    </section>
+
+    <!-- ============ VISTA CATEGORÍAS ============ -->
+    <section class="view" data-view-panel="categories" id="view-categories" hidden>
+      <div class="view-head">
+        <div>
+          <h1>Categorías</h1>
+          <p class="view-sub">Organiza la colección en secciones independientes.</p>
+        </div>
+      </div>
+
+      <div class="category-manager">
+        <div class="category-form">
+          <div class="field">
+            <label for="cat-name">Nueva categoría</label>
+            <input type="text" id="cat-name" maxlength="60" placeholder="Ej. Collares">
+          </div>
+          <button class="btn btn-gold" id="cat-create" type="button">Crear categoría</button>
+        </div>
+        <div class="category-list" id="category-list"></div>
+        <p class="empty-note" id="categories-empty" hidden>No hay categorías todavía.</p>
+      </div>
+    </section>
+
+    <!-- ============ VISTA RESPALDO ============ -->
+    <section class="view" data-view-panel="backup" id="view-backup" hidden>
+      <div class="view-head">
+        <div>
+          <h1>Respaldo y restauración</h1>
+          <p class="view-sub">Descarga una copia completa de la tienda y restáurala cuando lo necesites.</p>
+        </div>
+      </div>
+
+      <div class="backup-grid">
+        <div class="backup-card">
+          <h3>Descargar respaldo</h3>
+          <p>Incluye productos, categorías, variantes, ajustes, usuario administrador y las imágenes de la tienda, en un solo archivo JSON.</p>
+          <button class="btn btn-gold" id="backup-download" type="button">Descargar respaldo (.json)</button>
+        </div>
+        <div class="backup-card">
+          <h3>Restaurar respaldo</h3>
+          <p>Reemplaza el contenido actual de la tienda por el contenido del archivo. Esta acción no se puede deshacer.</p>
+          <input type="file" id="backup-file" accept="application/json,.json" hidden>
+          <button class="btn btn-ghost" id="backup-restore-pick" type="button">Elegir archivo…</button>
+          <button class="btn btn-danger backup-confirm" id="backup-restore-confirm" type="button" hidden>¿Restaurar ahora?</button>
+        </div>
+      </div>
     </section>
 
     <!-- ============ VISTA CONFIGURACIÓN ============ -->
@@ -335,6 +404,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="/js/image-editor.js?v=1"></script>
-<script src="/js/admin.js?v=3"></script>
+<script src="/js/admin.js?v=4"></script>
 </body>
 </html>

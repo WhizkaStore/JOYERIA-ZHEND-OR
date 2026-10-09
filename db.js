@@ -25,9 +25,19 @@ const DEFAULT_SETTINGS = {
   logo: ''
 };
 
+const SEED_CATEGORIES = [
+  ['anillos', 'Anillos', 1],
+  ['aretes', 'Aretes', 2],
+  ['brazaletes', 'Brazaletes', 3],
+  ['encanto-artesanal', 'Encanto artesanal', 4],
+  ['cadenas', 'Cadenas', 5],
+  ['dijes', 'Dijes', 6]
+];
+
 const SEED_PRODUCTS = [
   {
     name: 'Anillo Aura Dorado',
+    category: 'anillos',
     description:
       'Anillo de aro delicado con acabado dorado suave, inspirado en la calidez de la luz de la tarde.',
     price: 1450000,
@@ -39,6 +49,7 @@ const SEED_PRODUCTS = [
   },
   {
     name: 'Collar Gota de Luz',
+    category: 'cadenas',
     description:
       'Collar con colgante en forma de gota, perfecto para lucir una elegancia discreta y natural.',
     price: 1890000,
@@ -50,6 +61,7 @@ const SEED_PRODUCTS = [
   },
   {
     name: 'Aretes Susurro',
+    category: 'aretes',
     description: 'Aretes ligeros con movimiento sutil, compañeros ideales para el día a día.',
     price: 980000,
     weight: 'Diámetro 12 mm',
@@ -60,6 +72,7 @@ const SEED_PRODUCTS = [
   },
   {
     name: 'Pulsera Hoja Dorada',
+    category: 'brazaletes',
     description: 'Pulsera con un delicado detalle de hoja, un guiño sutil a la naturaleza.',
     price: 760000,
     weight: '21 cm ajustable',
@@ -70,6 +83,7 @@ const SEED_PRODUCTS = [
   },
   {
     name: 'Anillo Eternidad Botánica',
+    category: 'anillos',
     description: 'Anillo de diseño botánico con acabado pulido, para regalar y atesorar.',
     price: 2150000,
     weight: 'Aro de 2 mm',
@@ -80,6 +94,7 @@ const SEED_PRODUCTS = [
   },
   {
     name: 'Cadena Sol',
+    category: 'cadenas',
     description: 'Cadena fina con cierre delicado, una compañera versátil para cada momento.',
     price: 1230000,
     weight: '40 cm',
@@ -126,6 +141,7 @@ function initDb(db, { adminPassword, adminUser }) {
       weight TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'available',
       published INTEGER NOT NULL DEFAULT 1,
+      category TEXT NOT NULL DEFAULT '',
       image TEXT NOT NULL DEFAULT '',
       discount_type TEXT NOT NULL DEFAULT 'none',
       discount_value INTEGER NOT NULL DEFAULT 0,
@@ -134,6 +150,29 @@ function initDb(db, { adminPassword, adminUser }) {
       discount_end TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS categories (
+      slug TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS variant_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      required INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS variant_options (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '',
+      available INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -154,12 +193,21 @@ function initDb(db, { adminPassword, adminUser }) {
   `);
 
   // Migraciones para bases de datos creadas con versiones anteriores
+  ensureColumn(db, 'products', 'category', "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, 'products', 'discount_type', "TEXT NOT NULL DEFAULT 'none'");
   ensureColumn(db, 'products', 'discount_value', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'products', 'discount_active', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'products', 'discount_start', "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, 'products', 'discount_end', "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, 'admin_user', 'username', "TEXT NOT NULL DEFAULT 'admin'");
+
+  // Categorías del catálogo
+  const insertCategory = db.prepare(
+    'INSERT INTO categories (slug, name, sort_order) VALUES (?, ?, ?) ON CONFLICT(slug) DO UPDATE SET name = excluded.name, sort_order = excluded.sort_order'
+  );
+  for (const [slug, name, sortOrder] of SEED_CATEGORIES) {
+    insertCategory.run(slug, name, sortOrder);
+  }
 
   // Valores por defecto de la marca
   const setSetting = db.prepare(
@@ -182,8 +230,8 @@ function initDb(db, { adminPassword, adminUser }) {
   const productCount = db.prepare('SELECT COUNT(*) AS c FROM products').get().c;
   if (productCount === 0) {
     const insert = db.prepare(`
-      INSERT INTO products (name, description, price, weight, status, published, image, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO products (name, description, price, weight, status, published, category, image, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const now = new Date().toISOString();
     for (const p of SEED_PRODUCTS) {
@@ -194,6 +242,7 @@ function initDb(db, { adminPassword, adminUser }) {
         p.weight,
         p.status,
         p.published,
+        p.category || '',
         p.image,
         now,
         now
@@ -207,4 +256,4 @@ function initDb(db, { adminPassword, adminUser }) {
   );
 }
 
-module.exports = { initDb, hashPassword, verifyPassword, DEFAULT_SETTINGS };
+module.exports = { initDb, hashPassword, verifyPassword, DEFAULT_SETTINGS, SEED_CATEGORIES };

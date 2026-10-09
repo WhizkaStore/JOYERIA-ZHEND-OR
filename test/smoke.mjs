@@ -477,7 +477,246 @@ async function run() {
     quotedMsg.includes('• Descuento aplicado: -' + ZM.money(60000)) &&
     quotedMsg.includes('• Total: ' + ZM.money(275000)));
 
-  // 15. Cierre de sesión
+  // 14b. buildOrderMessage (carrito multi-producto)
+  const orderMsg = ZM.buildOrderMessage(
+    { brand_name: 'ZHEND’OR', shipping_cost: '35000' },
+    [
+      {
+        product: { name: 'Brazalete Hoja Dorada', category_name: 'Brazaletes' },
+        quantity: 2,
+        selections: [{ group_name: 'Color de hilo', option_label: 'Oro' }],
+        unit_price: 80000,
+        subtotal: 160000,
+        discount_amount: 0
+      },
+      { product: { name: 'Anillo Aura Dorado' }, quantity: 1, unit_price: 1450000, subtotal: 1450000, discount_amount: 0 }
+    ],
+    wData,
+    { subtotal: 1610000, discount_amount: 0, shipping: 35000, total: 1645000 }
+  );
+  check('buildOrderMessage incluye ambos productos',
+    orderMsg.includes('Brazalete Hoja Dorada') && orderMsg.includes('Anillo Aura Dorado'));
+  check('buildOrderMessage incluye las variantes elegidas', orderMsg.includes('Color de hilo: Oro'));
+  check('buildOrderMessage incluye la categoría', orderMsg.includes('(Brazaletes)'));
+  check('buildOrderMessage refleja el total del pedido', orderMsg.includes('• Total: ' + ZM.money(1645000)));
+  check('buildOrderMessage incluye los datos del cliente', orderMsg.includes('• Nombre: Ana Gómez'));
+
+  // 15. Categorías
+  const catsPublic = await json('/api/categories');
+  const seededSlugs = ['anillos', 'aretes', 'brazaletes', 'encanto-artesanal', 'cadenas', 'dijes'];
+  check('GET /api/categories expone las 6 categorías semilla',
+    catsPublic.status === 200 &&
+      seededSlugs.every((s) => catsPublic.body.categories.some((c) => c.slug === s)),
+    JSON.stringify(catsPublic.body?.categories));
+
+  const catsAdmin = await json('/api/admin/categories', { headers: auth });
+  check('GET /api/admin/categories incluye el conteo de productos',
+    catsAdmin.status === 200 && catsAdmin.body.categories.length >= 6 &&
+      catsAdmin.body.categories.every((c) => Number.isFinite(c.product_count)));
+
+  const catCreate = await json('/api/admin/categories', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({ name: 'Collares' })
+  });
+  check('POST categoría crea con slug "collares"',
+    catCreate.status === 201 && catCreate.body.category.slug === 'collares');
+
+  const catEdit = await json('/api/admin/categories/collares', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({ name: 'Collares y gargantillas' })
+  });
+  check('PUT renombra la categoría',
+    catEdit.status === 200 && catEdit.body.category.name === 'Collares y gargantillas');
+
+  const catInvalid = await json('/api/admin/categories', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({ name: 'x' })
+  });
+  check('Validación rechaza categoría demasiado corta', catInvalid.status === 400);
+
+  const catBusy = await json('/api/admin/categories/brazaletes', {
+    method: 'DELETE', headers: auth
+  });
+  check('No se elimina una categoría con productos', catBusy.status === 409);
+
+  const catDel = await json('/api/admin/categories/collares', { method: 'DELETE', headers: auth });
+  const catsFinal = await json('/api/admin/categories', { headers: auth });
+  check('La categoría sin productos se elimina',
+    catDel.status === 200 && !catsFinal.body.categories.some((c) => c.slug === 'collares'));
+
+  // 16. Producto con categoría y variantes
+  const withVar = await json('/api/admin/products', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({
+      name: 'Brazalete tejido test',
+      price: 80000,
+      status: 'available',
+      published: true,
+      category: 'brazaletes',
+      image: TINY_PNG,
+      variants: [
+        {
+          name: 'Color de hilo', required: true,
+          options: [
+            { label: 'Oro', color: '#d8be69', available: true },
+            { label: 'Verde', color: '#5f7a4a', available: true },
+            { label: 'Azul', color: '#3f5f8a', available: false }
+          ]
+        },
+        { name: 'Tamaño', required: false, options: [{ label: '17 cm', available: true }] }
+      ]
+    })
+  });
+  check('POST producto con variantes devuelve 201', withVar.status === 201, JSON.stringify(withVar.body));
+  const varId = withVar.body?.raw?.id;
+  check('El producto guarda la categoría con su nombre', withVar.body.product.category_name === 'Brazaletes');
+  check('El producto trae las variantes anidadas',
+    Array.isArray(withVar.body.product.variants) && withVar.body.product.variants.length === 2 &&
+      withVar.body.product.variants[0].options.length === 3);
+
+  const vars = withVar.body.product.variants;
+  const gColor = vars[0].id;
+  const optOro = vars[0].options[0].id;
+  const optVerde = vars[0].options[1].id;
+  const optAzul = vars[0].options[2].id;
+  const gTalla = vars[1].id;
+  const opt17 = vars[1].options[0].id;
+
+  const pubVar = await json('/api/products/' + varId);
+  check('El producto público incluye las variantes', pubVar.body.product.variants.length === 2);
+
+  const filterCat = await json('/api/products');
+  check('El catálogo público puede filtrarse por categoría (brazaletes)',
+    filterCat.body.products.filter((p) => p.category === 'brazaletes').some((p) => p.id === varId));
+
+  // 17. Validación de selecciones de variantes
+  const missingReq = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ product_id: varId, quantity: 1 })
+  });
+  check('Falta el grupo obligatorio: 400', missingReq.status === 400);
+
+  const badOption = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ product_id: varId, quantity: 1, variant_selections: [{ group_id: gColor, option_id: optAzul }] })
+  });
+  check('Opción agotada rechazada: 400', badOption.status === 400);
+
+  const okSel = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ product_id: varId, quantity: 2, variant_selections: [{ group_id: gColor, option_id: optOro }] })
+  });
+  check('Selección válida cotiza y normaliza variantes',
+    okSel.status === 200 && okSel.body.quote.subtotal === 160000 &&
+      okSel.body.quote.variants.length === 1 &&
+      okSel.body.quote.variants[0].option_label === 'Oro');
+
+  const wrongGroup = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ product_id: varId, quantity: 1, variant_selections: [{ group_id: gTalla, option_id: opt17 }] })
+  });
+  check('Elegir opción no obligatoria sin la obligatoria: 400', wrongGroup.status === 400);
+
+  const completeSel = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      product_id: varId, quantity: 1,
+      variant_selections: [{ group_id: gColor, option_id: optVerde }, { group_id: gTalla, option_id: opt17 }]
+    })
+  });
+  check('Selección completa normaliza ambas variantes', completeSel.body.quote.variants.length === 2);
+
+  // 18. Cotización multi-producto (carrito)
+  const seedId = publicList.body.products[0].id;
+  const multi = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      items: [
+        { product_id: varId, quantity: 2, variant_selections: [{ group_id: gColor, option_id: optOro }] },
+        { product_id: seedId, quantity: 1 }
+      ]
+    })
+  });
+  check('Cotización multi-item responde 200', multi.status === 200, JSON.stringify(multi.body));
+  check('La cotización devuelve dos líneas', multi.body.quote.items.length === 2);
+  const sumLines = multi.body.quote.items.reduce((s, it) => s + it.subtotal, 0);
+  check('El subtotal suma las líneas', multi.body.quote.subtotal === sumLines);
+  check('El total suma el envío', multi.body.quote.total === sumLines + 35000);
+  check('La primera línea normaliza sus variantes', multi.body.quote.items[0].variants[0].option_label === 'Oro');
+  check('La segunda línea no requiere variantes', multi.body.quote.items[1].variants.length === 0);
+
+  const emptyCart = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: [] })
+  });
+  check('El carrito vacío se rechaza', emptyCart.status === 400);
+
+  const staleCart = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: [{ product_id: 999999, quantity: 1 }] })
+  });
+  check('Producto inexistente en el carrito: 409', staleCart.status === 409);
+
+  const staleSel = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: [{ product_id: varId, quantity: 1, variant_selections: [{ group_id: gTalla, option_id: optOro }] }] })
+  });
+  check('Opción de otro grupo se rechaza en el carrito', staleSel.status === 400);
+
+  // 19. Respaldo y restauración
+  const backup = await json('/api/admin/backup', { headers: auth });
+  check('GET /api/admin/backup es válido', backup.status === 200 &&
+    backup.body.app === 'zhendor-joyeria' && Array.isArray(backup.body.products));
+  const backupProd = backup.body.products.find((p) => p.id === varId);
+  check('El respaldo incluye el producto con variantes', !!backupProd);
+  check('El respaldo incluye los grupos de variantes',
+    backup.body.variants.groups.some((g) => g.product_id === varId));
+
+  // Mutar y borrar el producto antes de restaurar
+  await json('/api/admin/products/' + varId, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({ name: 'Brazalete mutado', discount_active: false })
+  });
+  await json('/api/admin/products/' + varId, { method: 'DELETE', headers: auth });
+  const afterDelVar = await json('/api/admin/products', { headers: auth });
+  check('El producto se eliminó antes de restaurar',
+    !afterDelVar.body.products.some((p) => p.id === varId));
+
+  const badRestore = await json('/api/admin/restore', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({ foo: 1 })
+  });
+  check('Se rechaza un respaldo inválido', badRestore.status === 400);
+
+  const restored = await json('/api/admin/restore', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify(backup.body)
+  });
+  check('POST /api/admin/restore restaura el estado', restored.status === 200, JSON.stringify(restored.body));
+
+  const restoredList = await json('/api/admin/products', { headers: auth });
+  const restoredProd = restoredList.body.products.find((p) => p.id === varId);
+  check('El producto vuelve tras restaurar',
+    !!restoredProd && restoredProd.name === 'Brazalete tejido test' &&
+      restoredProd.category === 'brazaletes');
+  check('Las variantes vuelven tras restaurar',
+    Array.isArray(restoredProd.variants) && restoredProd.variants.length === 2);
+  if (restoredProd && restoredProd.image) {
+    const imgRest = await fetch(BASE + restoredProd.image);
+    check('La imagen del producto se restaura en disco', imgRest.status === 200);
+  }
+  const restoredSettings = await json('/api/settings');
+  check('Los ajustes se restauran', restoredSettings.body.settings.shipping_cost === '35000');
+
+  // Categoría custom tras restaurar (eliminada antes del backup, debe seguir sin existir)
+  const catsAfterRestore = await json('/api/admin/categories', { headers: auth });
+  check('Las categorías extra del respaldo se conservan',
+    catsAfterRestore.body.categories.every((c) => seededSlugs.includes(c.slug)) ||
+      catsAfterRestore.body.categories.length >= 6);
+
+  await json('/api/admin/products/' + varId, { method: 'DELETE', headers: auth });
+
+  // 20. Cierre de sesión
   const logout = await json('/api/admin/logout', { method: 'POST', headers: auth });
   check('Logout responde 200', logout.status === 200);
   const afterLogout = await json('/api/admin/products', { headers: auth });

@@ -75,29 +75,29 @@ initDb(db, { adminPassword: ADMIN_PASSWORD, adminUser: ADMIN_USER });
 
 const stmts = {
   productsPublic: db.prepare(
-    `SELECT id, name, description, price, weight, status, image,
+    `SELECT id, name, description, price, weight, status, image, category,
             discount_type, discount_value, discount_active, discount_start, discount_end
      FROM products WHERE published = 1 ORDER BY id ASC`
   ),
   productPublicById: db.prepare(
-    `SELECT id, name, description, price, weight, status, image,
+    `SELECT id, name, description, price, weight, status, image, category,
             discount_type, discount_value, discount_active, discount_start, discount_end
      FROM products WHERE published = 1 AND id = ?`
   ),
   productsAll: db.prepare(
-    `SELECT id, name, description, price, weight, status, published, image,
+    `SELECT id, name, description, price, weight, status, published, image, category,
             discount_type, discount_value, discount_active, discount_start, discount_end,
             created_at, updated_at
      FROM products ORDER BY id DESC`
   ),
   productById: db.prepare('SELECT * FROM products WHERE id = ?'),
   insertProduct: db.prepare(`
-    INSERT INTO products (name, description, price, weight, status, published, image,
+    INSERT INTO products (name, description, price, weight, status, published, category, image,
       discount_type, discount_value, discount_active, discount_start, discount_end, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
   updateProduct: db.prepare(`
     UPDATE products
-    SET name = ?, description = ?, price = ?, weight = ?, status = ?, published = ?, image = ?,
+    SET name = ?, description = ?, price = ?, weight = ?, status = ?, published = ?, category = ?, image = ?,
         discount_type = ?, discount_value = ?, discount_active = ?, discount_start = ?, discount_end = ?,
         updated_at = ?
     WHERE id = ?`),
@@ -109,7 +109,28 @@ const stmts = {
   adminUser: db.prepare('SELECT username, password_hash FROM admin_user WHERE id = 1'),
   createSession: db.prepare('INSERT INTO sessions (token, created_at) VALUES (?, ?)'),
   session: db.prepare('SELECT created_at FROM sessions WHERE token = ?'),
-  deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?')
+  deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
+  /* --- Categorías --- */
+  categoriesAll: db.prepare('SELECT slug, name, sort_order FROM categories ORDER BY sort_order, name'),
+  categoryBySlug: db.prepare('SELECT * FROM categories WHERE slug = ?'),
+  categoryExists: db.prepare('SELECT 1 FROM categories WHERE slug = ?'),
+  categoryCountFor: db.prepare('SELECT COUNT(*) AS c FROM products WHERE category = ?'),
+  insertCategory: db.prepare('INSERT INTO categories (slug, name, sort_order) VALUES (?, ?, ?)'),
+  updateCategory: db.prepare('UPDATE categories SET name = ?, sort_order = ? WHERE slug = ?'),
+  deleteCategory: db.prepare('DELETE FROM categories WHERE slug = ?'),
+  /* --- Variantes --- */
+  variantGroups: db.prepare('SELECT * FROM variant_groups WHERE product_id = ? ORDER BY sort_order, id'),
+  variantOptions: db.prepare('SELECT * FROM variant_options WHERE group_id = ? ORDER BY sort_order, id'),
+  insertVariantGroup: db.prepare(
+    'INSERT INTO variant_groups (product_id, name, required, sort_order) VALUES (?, ?, ?, ?)'
+  ),
+  insertVariantOption: db.prepare(
+    'INSERT INTO variant_options (group_id, label, color, available, sort_order) VALUES (?, ?, ?, ?, ?)'
+  ),
+  deleteVariantGroups: db.prepare('DELETE FROM variant_groups WHERE product_id = ?'),
+  deleteVariantOptionsForGroup: db.prepare('DELETE FROM variant_options WHERE group_id = ?'),
+  allVariantGroups: db.prepare('SELECT * FROM variant_groups ORDER BY product_id, sort_order, id'),
+  allVariantOptions: db.prepare('SELECT * FROM variant_options ORDER BY group_id, sort_order, id')
 };
 
 function getSettings() {
@@ -135,6 +156,151 @@ function getPublicSettings() {
     shipping_cost: s.shipping_cost,
     logo: s.logo
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Categorías y variantes                                             */
+/* ------------------------------------------------------------------ */
+
+function categoryName(slug) {
+  if (!slug) return '';
+  const row = stmts.categoryBySlug.get(slug);
+  return row ? row.name : slug;
+}
+
+function getCategories() {
+  return stmts.categoriesAll.all();
+}
+
+function getVariants(productId) {
+  const groups = stmts.variantGroups.all(productId);
+  return groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    required: Number(g.required) === 1,
+    sort_order: g.sort_order,
+    options: stmts.variantOptions.all(g.id).map((o) => ({
+      id: o.id,
+      label: o.label,
+      color: o.color || '',
+      available: Number(o.available) === 1,
+      sort_order: o.sort_order
+    }))
+  }));
+}
+
+// Producto con categoría y variantes incluidas (para público y admin).
+function attachProduct(row) {
+  const pub = pricing.serializeProduct(row);
+  pub.category = row.category || '';
+  pub.category_name = categoryName(pub.category);
+  pub.variants = getVariants(row.id);
+  return pub;
+}
+
+function slugify(value) {
+  const s = cleanStr(String(value ?? ''), 60)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ñ/g, 'n')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return s;
+}
+
+// Reemplaza todas las variantes de un producto de forma transaccional.
+function replaceVariants(productId, groupsInput) {
+  const groups = Array.isArray(groupsInput) ? groupsInput : [];
+  db.exec('BEGIN');
+  try {
+    const existing = stmts.variantGroups.all(productId);
+    for (const g of existing) stmts.deleteVariantOptionsForGroup.run(g.id);
+    stmts.deleteVariantGroups.run(productId);
+
+    let groupOrder = 0;
+    for (const g of groups) {
+      const name = cleanStr(g.name, 80);
+      if (!name) continue;
+      const required = g.required === true || g.required === 1 || g.required === 'true' ? 1 : 0;
+      const grp = stmts.insertVariantGroup.run(productId, name, required, groupOrder++);
+      const groupId = Number(grp.lastInsertRowid);
+      const options = Array.isArray(g.options) ? g.options : [];
+      let optionOrder = 0;
+      for (const o of options) {
+        const label = cleanStr(o.label, 80);
+        if (!label) continue;
+        const color = cleanStr(o.color, 20);
+        const available = o.available === false || o.available === 0 || o.available === 'false' ? 0 : 1;
+        stmts.insertVariantOption.run(groupId, label, color, available, optionOrder++);
+      }
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+// Valida las selecciones de variantes contra un producto y devuelve las
+// selecciones normalizadas (fuente de verdad para el pedido).
+function buildSelections(product, rawSelections) {
+  const groups = getVariants(product.id);
+  const errors = [];
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  const picked = new Map();
+
+  for (const sel of rawSelections || []) {
+    if (!sel) continue;
+    const gid = Number(sel.group_id);
+    const oid = Number(sel.option_id);
+    if (!Number.isFinite(gid) || !Number.isFinite(oid)) {
+      errors.push('La configuración del producto no es válida.');
+      continue;
+    }
+    const group = byId.get(gid);
+    if (!group) {
+      errors.push('La configuración del producto no es válida.');
+      continue;
+    }
+    const option = group.options.find((o) => o.id === oid);
+    if (!option) {
+      errors.push('La configuración del producto no es válida.');
+      continue;
+    }
+    if (!option.available) {
+      errors.push(`La opción "${option.label}" de ${group.name} está agotada.`);
+      continue;
+    }
+    picked.set(gid, option);
+  }
+
+  for (const group of groups) {
+    if (group.required && !picked.has(group.id)) {
+      errors.push(`Selecciona ${group.name} para poder continuar.`);
+    }
+  }
+
+  const selections = groups
+    .filter((g) => picked.has(g.id))
+    .map((g) => {
+      const opt = picked.get(g.id);
+      return {
+        group_id: g.id,
+        group_name: g.name,
+        option_id: opt.id,
+        option_label: opt.label,
+        color: opt.color || ''
+      };
+    });
+  return { errors, selections };
+}
+
+function parseShippingValue(shippingCost) {
+  if (shippingCost === null || shippingCost === undefined || String(shippingCost).trim() === '') {
+    return null;
+  }
+  return Math.max(0, pricing.toInt(shippingCost));
 }
 
 /* ------------------------------------------------------------------ */
@@ -360,6 +526,13 @@ function validateProductInput(data, { partial = false } = {}) {
   if (!partial || data.weight !== undefined) {
     out.weight = cleanStr(data.weight, 80);
   }
+  if (!partial || data.category !== undefined) {
+    const category = cleanStr(data.category, 60);
+    if (category && !stmts.categoryBySlug.get(category)) {
+      errors.push('La categoría seleccionada no existe.');
+    }
+    out.category = category;
+  }
   if (!partial || data.status !== undefined) {
     const status = cleanStr(data.status, 20);
     if (!['available', 'out_of_stock'].includes(status)) {
@@ -530,7 +703,7 @@ function route(method, pattern, handler) {
 /* --- API pública --- */
 
 route('GET', '/api/products', (req, res) => {
-  const products = stmts.productsPublic.all().map((p) => pricing.serializeProduct(p));
+  const products = stmts.productsPublic.all().map((p) => attachProduct(p));
   sendJson(res, 200, { products });
 });
 
@@ -538,7 +711,11 @@ route('GET', '/api/products/:id', (req, res, params) => {
   const id = Number.parseInt(params.id, 10);
   const product = Number.isFinite(id) ? stmts.productPublicById.get(id) : undefined;
   if (!product) return sendJson(res, 404, { error: 'Producto no encontrado.' });
-  sendJson(res, 200, { product: pricing.serializeProduct(product) });
+  sendJson(res, 200, { product: attachProduct(product) });
+});
+
+route('GET', '/api/categories', (req, res) => {
+  sendJson(res, 200, { categories: getCategories() });
 });
 
 route('GET', '/api/settings', (req, res) => {
@@ -546,6 +723,8 @@ route('GET', '/api/settings', (req, res) => {
 });
 
 // Cotización de un pedido calculada en el servidor (fuente de verdad del precio).
+// Acepta un solo producto (product_id + quantity, formato clásico) o varios
+// (items: [{product_id, quantity, variant_selections}]).
 route('POST', '/api/order/quote', async (req, res) => {
   let body;
   try {
@@ -553,16 +732,67 @@ route('POST', '/api/order/quote', async (req, res) => {
   } catch (error) {
     return sendJson(res, 400, { error: error.message });
   }
-  const id = Number.parseInt(body.product_id, 10);
-  const product = Number.isFinite(id) ? stmts.productPublicById.get(id) : undefined;
-  if (!product) {
-    return sendJson(res, 404, { error: 'El producto no está disponible.' });
+
+  const shippingCost = getSettings().shipping_cost;
+
+  // --- Modo clásico: un solo producto ---
+  if (!Array.isArray(body.items)) {
+    const id = pricing.toInt(body.product_id);
+    const product = Number.isFinite(id) ? stmts.productPublicById.get(id) : undefined;
+    if (!product) {
+      return sendJson(res, 404, { error: 'El producto no está disponible.' });
+    }
+    if (product.status === 'out_of_stock') {
+      return sendJson(res, 409, { error: 'Esta pieza está agotada por el momento.' });
+    }
+    const { errors, selections } = buildSelections(product, body.variant_selections);
+    if (errors.length) {
+      return sendJson(res, 400, { error: errors[0], errors });
+    }
+    const quote = pricing.computeQuote(product, body.quantity, shippingCost);
+    quote.variants = selections;
+    return sendJson(res, 200, { quote });
   }
-  if (product.status === 'out_of_stock') {
-    return sendJson(res, 409, { error: 'Esta pieza está agotada por el momento.' });
+
+  // --- Modo carrito: varios productos ---
+  if (!body.items.length) {
+    return sendJson(res, 400, { error: 'El carrito está vacío.' });
   }
-  const settings = getSettings();
-  sendJson(res, 200, { quote: pricing.computeQuote(product, body.quantity, settings.shipping_cost) });
+  const items = [];
+  for (const it of body.items) {
+    const pid = pricing.toInt(it && it.product_id);
+    const product = Number.isFinite(pid) ? stmts.productPublicById.get(pid) : undefined;
+    if (!product) {
+      return sendJson(res, 409, { error: 'Uno de los productos ya no está disponible. Revisa tu carrito.' });
+    }
+    if (product.status === 'out_of_stock') {
+      return sendJson(res, 409, { error: `"${product.name}" está agotado por el momento. Revisa tu carrito.` });
+    }
+    const { errors, selections } = buildSelections(product, it.variant_selections);
+    if (errors.length) {
+      return sendJson(res, 400, { error: errors[0], errors, product_id: pid });
+    }
+    const line = pricing.computeQuote(product, it.quantity, shippingCost);
+    line.product_id = product.id;
+    line.name = product.name;
+    line.image = product.image || '';
+    line.category = product.category || '';
+    line.category_name = categoryName(line.category);
+    line.variants = selections;
+    items.push(line);
+  }
+
+  const subtotal = items.reduce((sum, it) => sum + it.subtotal, 0);
+  const discountAmount = items.reduce((sum, it) => sum + it.discount_amount, 0);
+  const shipping = parseShippingValue(shippingCost);
+  const quote = {
+    items,
+    subtotal,
+    discount_amount: discountAmount,
+    shipping,
+    total: shipping === null ? null : subtotal + shipping
+  };
+  sendJson(res, 200, { quote });
 });
 
 /* --- API de administración (protegida) --- */
@@ -618,12 +848,17 @@ route('GET', '/api/admin/me', (req, res) => {
 route('GET', '/api/admin/products', (req, res) => {
   if (!requireAdmin(req, res)) return;
   const products = stmts.productsAll.all().map((p) => {
-    const pub = pricing.serializeProduct(p);
+    const attached = attachProduct(p);
     return {
-      ...p,
-      final_price: pub.final_price,
-      has_discount: pub.has_discount,
-      discount_label: pub.discount_label
+      ...attached,
+      published: p.published,
+      discount_type: p.discount_type,
+      discount_value: p.discount_value,
+      discount_active: p.discount_active,
+      discount_start: p.discount_start,
+      discount_end: p.discount_end,
+      created_at: p.created_at,
+      updated_at: p.updated_at
     };
   });
   sendJson(res, 200, { products });
@@ -644,6 +879,7 @@ route('POST', '/api/admin/products', async (req, res) => {
     description: out.description ?? '',
     price: out.price,
     weight: out.weight ?? '',
+    category: out.category ?? '',
     status: out.status,
     published: out.published,
     discount_type: out.discount_type ?? 'none',
@@ -664,12 +900,15 @@ route('POST', '/api/admin/products', async (req, res) => {
 
   const now = new Date().toISOString();
   const result = stmts.insertProduct.run(
-    merged.name, merged.description, merged.price, merged.weight, merged.status, merged.published, image,
+    merged.name, merged.description, merged.price, merged.weight, merged.status, merged.published, merged.category, image,
     merged.discount_type, merged.discount_value, merged.discount_active, merged.discount_start, merged.discount_end,
     now, now
   );
   const product = stmts.productById.get(Number(result.lastInsertRowid));
-  sendJson(res, 201, { product: pricing.serializeProduct(product), raw: product });
+  if (Array.isArray(body.variants) && body.variants.length) {
+    replaceVariants(product.id, body.variants);
+  }
+  sendJson(res, 201, { product: attachProduct(product), raw: product });
 });
 
 route('PUT', '/api/admin/products/:id', async (req, res, params) => {
@@ -701,6 +940,7 @@ route('PUT', '/api/admin/products/:id', async (req, res, params) => {
     description: pick('description', existing.description),
     price: pick('price', existing.price),
     weight: pick('weight', existing.weight),
+    category: pick('category', existing.category),
     status: pick('status', existing.status),
     published: pick('published', existing.published),
     image,
@@ -718,12 +958,15 @@ route('PUT', '/api/admin/products/:id', async (req, res, params) => {
   }
 
   stmts.updateProduct.run(
-    merged.name, merged.description, merged.price, merged.weight, merged.status, merged.published, merged.image,
+    merged.name, merged.description, merged.price, merged.weight, merged.status, merged.published, merged.category, merged.image,
     merged.discount_type, merged.discount_value, merged.discount_active, merged.discount_start, merged.discount_end,
     new Date().toISOString(), id
   );
+  if (Array.isArray(body.variants)) {
+    replaceVariants(id, body.variants);
+  }
   const product = stmts.productById.get(id);
-  sendJson(res, 200, { product: pricing.serializeProduct(product), raw: product });
+  sendJson(res, 200, { product: attachProduct(product), raw: product });
 });
 
 route('DELETE', '/api/admin/products/:id', (req, res, params) => {
@@ -732,8 +975,95 @@ route('DELETE', '/api/admin/products/:id', (req, res, params) => {
   const existing = Number.isFinite(id) ? stmts.productById.get(id) : undefined;
   if (!existing) return sendJson(res, 404, { error: 'Producto no encontrado.' });
   if (existing.image) removeImage(existing.image);
+  const groups = stmts.variantGroups.all(id);
+  for (const g of groups) stmts.deleteVariantOptionsForGroup.run(g.id);
+  stmts.deleteVariantGroups.run(id);
   stmts.deleteProduct.run(id);
   sendJson(res, 200, { ok: true });
+});
+
+/* --- Gestión de categorías (protegida) --- */
+
+route('GET', '/api/admin/categories', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const categories = getCategories().map((c) => ({
+    ...c,
+    product_count: stmts.categoryCountFor.get(c.slug).c
+  }));
+  sendJson(res, 200, { categories });
+});
+
+route('POST', '/api/admin/categories', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  let body;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    return sendJson(res, 400, { error: error.message });
+  }
+  const name = cleanStr(body.name, 60);
+  if (name.length < 2) return sendJson(res, 400, { error: 'El nombre debe tener al menos 2 caracteres.' });
+  let slug = slugify(name);
+  if (!slug) return sendJson(res, 400, { error: 'El nombre de la categoría no es válido.' });
+  if (stmts.categoryBySlug.get(slug)) {
+    slug = `${slug}-${Date.now().toString(36)}`;
+  }
+  stmts.insertCategory.run(slug, name, 0);
+  sendJson(res, 201, { category: { slug, name, sort_order: 0 } });
+});
+
+route('PUT', '/api/admin/categories/:slug', async (req, res, params) => {
+  if (!requireAdmin(req, res)) return;
+  const slug = params.slug;
+  const existing = stmts.categoryBySlug.get(slug);
+  if (!existing) return sendJson(res, 404, { error: 'Categoría no encontrada.' });
+  let body;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    return sendJson(res, 400, { error: error.message });
+  }
+  const name = body.name === undefined ? existing.name : cleanStr(body.name, 60);
+  if (name.length < 2) return sendJson(res, 400, { error: 'El nombre debe tener al menos 2 caracteres.' });
+  const sortOrder =
+    body.sort_order === undefined ? existing.sort_order : Math.max(0, pricing.toInt(body.sort_order));
+  stmts.updateCategory.run(name, sortOrder, slug);
+  sendJson(res, 200, { category: { slug, name, sort_order: sortOrder } });
+});
+
+route('DELETE', '/api/admin/categories/:slug', (req, res, params) => {
+  if (!requireAdmin(req, res)) return;
+  const slug = params.slug;
+  const existing = stmts.categoryBySlug.get(slug);
+  if (!existing) return sendJson(res, 404, { error: 'Categoría no encontrada.' });
+  const count = stmts.categoryCountFor.get(slug).c;
+  if (count > 0) {
+    return sendJson(res, 409, { error: 'No se puede eliminar una categoría que tiene productos. Reasigna los productos primero.' });
+  }
+  stmts.deleteCategory.run(slug);
+  sendJson(res, 200, { ok: true });
+});
+
+/* --- Variantes de producto (protegida) --- */
+
+route('PUT', '/api/admin/products/:id/variants', async (req, res, params) => {
+  if (!requireAdmin(req, res)) return;
+  const id = Number.parseInt(params.id, 10);
+  const existing = Number.isFinite(id) ? stmts.productById.get(id) : undefined;
+  if (!existing) return sendJson(res, 404, { error: 'Producto no encontrado.' });
+  let body;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    return sendJson(res, 400, { error: error.message });
+  }
+  try {
+    replaceVariants(id, body.groups);
+  } catch (error) {
+    console.error('[Variantes]', error);
+    return sendJson(res, 500, { error: 'No se pudieron guardar las variantes.' });
+  }
+  sendJson(res, 200, { variants: getVariants(id) });
 });
 
 route('GET', '/api/admin/settings', (req, res) => {
@@ -774,6 +1104,170 @@ route('PUT', '/api/admin/settings', async (req, res) => {
     stmts.setSetting.run(key, String(value));
   }
   sendJson(res, 200, { settings: getPublicSettings() });
+});
+
+/* --- Respaldo y restauración (protegida) --- */
+
+function collectImageData(images, imagePath) {
+  if (!imagePath || !imagePath.startsWith('/uploads/') || imagePath.includes('..')) return;
+  if (images[imagePath]) return;
+  const full = path.join(UPLOADS_DIR, imagePath.slice('/uploads/'.length));
+  try {
+    const data = fs.readFileSync(full);
+    const ext = path.extname(imagePath).toLowerCase();
+    const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+    images[imagePath] = `data:${mime};base64,${data.toString('base64')}`;
+  } catch {
+    /* el archivo ya no existe; se conserva la ruta */
+  }
+}
+
+route('GET', '/api/admin/backup', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const products = db.prepare('SELECT * FROM products ORDER BY id').all();
+  const settings = db.prepare('SELECT key, value FROM settings ORDER BY key').all();
+  const images = {};
+  for (const p of products) collectImageData(images, p.image);
+  const logo = settings.find((s) => s.key === 'logo');
+  if (logo) collectImageData(images, logo.value);
+  const payload = {
+    app: 'zhendor-joyeria',
+    schema: 2,
+    generated_at: new Date().toISOString(),
+    settings,
+    categories: getCategories(),
+    products,
+    admin_user: db.prepare('SELECT username, password_hash FROM admin_user WHERE id = 1').get(),
+    variants: {
+      groups: stmts.allVariantGroups.all(),
+      options: stmts.allVariantOptions.all()
+    },
+    images
+  };
+  sendJson(res, 200, payload);
+});
+
+route('POST', '/api/admin/restore', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  let body;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    return sendJson(res, 400, { error: error.message });
+  }
+  if (!body || body.app !== 'zhendor-joyeria' || !Array.isArray(body.products)) {
+    return sendJson(res, 400, { error: 'El archivo de respaldo no es válido.' });
+  }
+
+  db.exec('BEGIN');
+  try {
+    // 1) Restaurar archivos de imagen que falten (misma ruta relativa)
+    if (body.images && typeof body.images === 'object') {
+      for (const [imagePath, dataUrl] of Object.entries(body.images)) {
+        if (!/^\/uploads\/[^/].+/.test(imagePath) || imagePath.includes('..')) continue;
+        if (typeof dataUrl !== 'string') continue;
+        const full = path.join(UPLOADS_DIR, imagePath.slice('/uploads/'.length));
+        const decoded = decodeDataUrl(dataUrl);
+        if (!decoded) continue;
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, decoded.buf);
+      }
+    }
+
+    // 2) Ajustes
+    db.prepare('DELETE FROM settings').run();
+    const insertSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)');
+    for (const row of body.settings || []) {
+      if (row && row.key) insertSetting.run(String(row.key), String(row.value ?? ''));
+    }
+
+    // 3) Categorías
+    db.prepare('DELETE FROM categories').run();
+    const insertCategoryRow = db.prepare('INSERT INTO categories (slug, name, sort_order) VALUES (?, ?, ?)');
+    for (const c of body.categories || []) {
+      if (c && c.slug && c.name) {
+        insertCategoryRow.run(String(c.slug), String(c.name), pricing.toInt(c.sort_order));
+      }
+    }
+
+    // 4) Productos (con sus ids originales, sin perder datos)
+    const groupsBefore = stmts.allVariantGroups.all();
+    const deleteOpt = db.prepare('DELETE FROM variant_options WHERE group_id = ?');
+    for (const g of groupsBefore) deleteOpt.run(g.id);
+    db.prepare('DELETE FROM variant_groups').run();
+    db.prepare('DELETE FROM products').run();
+
+    const insertProductRow = db.prepare(`
+      INSERT INTO products (id, name, description, price, weight, status, published, category, image,
+        discount_type, discount_value, discount_active, discount_start, discount_end, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const p of body.products || []) {
+      if (!p || typeof p.name !== 'string' || !p.name.trim()) continue;
+      const id = pricing.toInt(p.id) || null;
+      insertProductRow.run(
+        id,
+        String(p.name).slice(0, 120),
+        String(p.description ?? '').slice(0, 2000),
+        Math.max(0, pricing.toInt(p.price)),
+        String(p.weight ?? '').slice(0, 80),
+        p.status === 'out_of_stock' ? 'out_of_stock' : 'available',
+        p.published === false || p.published === 0 || p.published === '0' ? 0 : 1,
+        String(p.category ?? '').slice(0, 60),
+        typeof p.image === 'string' ? p.image.slice(0, 500) : '',
+        p.discount_type === 'percent' || p.discount_type === 'fixed' ? p.discount_type : 'none',
+        Math.max(0, pricing.toInt(p.discount_value)),
+        p.discount_active === false || p.discount_active === 0 || p.discount_active === '0' ? 0 : 1,
+        String(p.discount_start ?? ''),
+        String(p.discount_end ?? ''),
+        String(p.created_at ?? new Date().toISOString()),
+        String(p.updated_at ?? new Date().toISOString())
+      );
+    }
+
+    // 5) Variantes (mapeando los ids de grupo al nuevo esquema)
+    const groupIdMap = new Map();
+    for (const g of body.variants && body.variants.groups ? body.variants.groups : []) {
+      if (!g || !g.product_id || !g.name) continue;
+      const inserted = stmts.insertVariantGroup.run(
+        pricing.toInt(g.product_id),
+        String(g.name).slice(0, 80),
+        g.required === true || g.required === 1 || g.required === 'true' ? 1 : 0,
+        pricing.toInt(g.sort_order)
+      );
+      groupIdMap.set(pricing.toInt(g.id), Number(inserted.lastInsertRowid));
+    }
+    const insertOptionRow = db.prepare(
+      'INSERT INTO variant_options (group_id, label, color, available, sort_order) VALUES (?, ?, ?, ?, ?)'
+    );
+    for (const o of body.variants && body.variants.options ? body.variants.options : []) {
+      if (!o || !o.group_id || !o.label) continue;
+      const newGroupId = groupIdMap.get(pricing.toInt(o.group_id));
+      if (newGroupId === undefined) continue;
+      insertOptionRow.run(
+        newGroupId,
+        String(o.label).slice(0, 80),
+        String(o.color ?? '').slice(0, 20),
+        o.available === false || o.available === 0 || o.available === 'false' ? 0 : 1,
+        pricing.toInt(o.sort_order)
+      );
+    }
+
+    // 6) Usuario administrador (no se restaura la sesión actual)
+    if (body.admin_user && typeof body.admin_user.password_hash === 'string') {
+      db.prepare('UPDATE admin_user SET username = ?, password_hash = ? WHERE id = 1').run(
+        String(body.admin_user.username || 'admin').slice(0, 120),
+        String(body.admin_user.password_hash)
+      );
+    }
+
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    console.error('[Restaurar]', error);
+    return sendJson(res, 500, { error: 'No se pudo restaurar el respaldo. Intenta de nuevo.' });
+  }
+  sendJson(res, 200, { ok: true });
 });
 
 /* ------------------------------------------------------------------ */

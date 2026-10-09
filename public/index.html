@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=2">
 </head>
 <body>
 
@@ -47,15 +47,20 @@
       <nav class="main-nav" id="main-nav" aria-label="Navegación principal">
         <a href="#inicio" class="nav-link">Inicio</a>
         <a href="#coleccion" class="nav-link">Colección</a>
+        <span class="nav-categories" id="nav-categories"></span>
         <a href="#contacto" class="nav-link">Contacto</a>
       </nav>
 
       <div class="header-actions">
-        <a class="icon-button" id="orders-link" href="#contacto" title="Pedidos por WhatsApp" aria-label="Pedidos por WhatsApp">
+        <button class="icon-button cart-button" id="cart-open" aria-label="Abrir carrito" title="Ver carrito">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M6 7h12l1.2 12.2a1.8 1.8 0 0 1-1.8 1.8H6.6a1.8 1.8 0 0 1-1.8-1.8L6 7Z"/>
             <path d="M9 10V6a3 3 0 0 1 6 0v4"/>
           </svg>
+          <span class="cart-badge" id="cart-badge" hidden>0</span>
+        </button>
+        <a class="icon-button" id="orders-link" href="#contacto" title="Pedidos por WhatsApp" aria-label="Pedidos por WhatsApp">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.6-6.1c-.3-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.3-.7.8-.8 1-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4 0-.5.2-.7l.4-.5c.1-.1.1-.3 0-.4l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.9.9-1.1 2.2-.2 3.9a11.6 11.6 0 0 0 4.5 4.2c1.7.8 2.4.9 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.1-.4-.2Z"/></svg>
         </a>
         <button class="icon-button menu-toggle" id="menu-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="main-nav">
           <span></span><span></span><span></span>
@@ -117,6 +122,10 @@
           <h2 class="section-title">Piezas con alma</h2>
           <p class="section-sub">Cada joya se presenta con luz natural, tal cual es. Selecciona la tuya y escríbenos por WhatsApp para reservarla.</p>
         </header>
+
+        <div class="category-grid" id="category-grid" aria-label="Categorías de la colección"></div>
+
+        <nav class="category-chips" id="category-chips" aria-label="Filtrar la colección"></nav>
 
         <div class="product-grid" id="product-grid" aria-live="polite"></div>
 
@@ -208,6 +217,29 @@
     </div>
   </footer>
 
+  <!-- ======================= CARRITO ======================= -->
+  <div class="cart-drawer" id="cart-drawer" hidden>
+    <div class="cart-overlay" id="cart-overlay"></div>
+    <aside class="cart-panel" role="dialog" aria-modal="true" aria-label="Tu carrito">
+      <header class="cart-head">
+        <h3 class="cart-title">Tu carrito</h3>
+        <button class="modal-close" id="cart-close" aria-label="Cerrar carrito">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="cart-items" id="cart-items"></div>
+      <div class="cart-empty" id="cart-empty">
+        <p>Tu carrito está vacío.</p>
+        <a class="btn btn-outline-gold" href="#coleccion" id="cart-empty-link">Ir a la colección</a>
+      </div>
+      <footer class="cart-foot">
+        <div class="cart-subtotal" id="cart-subtotal"></div>
+        <button class="btn btn-gold cart-checkout" id="cart-checkout" type="button">Continuar pedido</button>
+        <button class="link-btn cart-clear" id="cart-clear" type="button">Vaciar carrito</button>
+      </footer>
+    </aside>
+  </div>
+
   <!-- ======================= MODAL PRODUCTO ======================= -->
   <div class="modal" id="product-modal" role="dialog" aria-modal="true" aria-labelledby="pm-title" hidden>
     <div class="modal-overlay" data-close></div>
@@ -219,11 +251,13 @@
         <img id="pm-image" src="" alt="" data-name="">
       </div>
       <div class="pm-body">
+        <p class="pm-category" id="pm-category"></p>
         <h3 class="pm-title" id="pm-title"></h3>
         <p class="pm-price" id="pm-price"></p>
         <p class="pm-weight" id="pm-weight"></p>
         <p class="pm-availability" id="pm-availability"></p>
         <p class="pm-description" id="pm-description"></p>
+        <div class="pm-variants" id="pm-variants"></div>
         <div class="pm-actions" id="pm-actions">
           <label class="qty-label" for="pm-qty">Cantidad</label>
           <div class="qty-stepper">
@@ -231,7 +265,10 @@
             <input type="number" id="pm-qty" min="1" max="99" value="1" inputmode="numeric">
             <button type="button" class="qty-btn" id="pm-plus" aria-label="Aumentar">+</button>
           </div>
-          <button class="btn btn-gold pm-buy" id="pm-buy">Comprar</button>
+          <div class="pm-buttons">
+            <button class="btn btn-ghost pm-add" id="pm-add" type="button">Añadir al carrito</button>
+            <button class="btn btn-gold pm-buy" id="pm-buy" type="button">Comprar ahora</button>
+          </div>
         </div>
       </div>
     </div>
@@ -251,7 +288,10 @@
         <p class="co-sub">Revisa los detalles y continúa por WhatsApp para confirmar con la tienda.</p>
       </div>
 
-      <div class="co-summary" id="co-summary"></div>
+      <div class="co-summary" id="co-summary">
+        <div class="co-items" id="co-items"></div>
+        <div class="co-totals" id="co-totals"></div>
+      </div>
 
       <form class="co-form" id="co-form" novalidate>
         <div class="field">
@@ -288,7 +328,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="/js/message.js"></script>
-  <script src="/js/site.js"></script>
+  <script src="/js/message.js?v=2"></script>
+  <script src="/js/site.js?v=2"></script>
 </body>
 </html>

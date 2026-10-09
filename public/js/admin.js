@@ -149,17 +149,57 @@ function computeDiscount(source) {
 /* ------------------------------------------------------------------ */
 
 let products = [];
+let productsAll = [];
+let productsFilter = null;
+let categories = [];
 let currentSettings = null;
 let pendingImage = null;
 let pendingLogo = null;
 let deleteId = null;
+let editorVariants = [];
+let variantIdSeed = 1;
 
 async function loadProducts() {
   try {
     const data = await api('/api/admin/products');
-    products = data.products;
+    productsAll = data.products;
+    productsFilter = null;
+    products = [...productsAll];
     renderProducts();
     renderDashboard();
+    updateProductsFilterBar();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function updateProductsFilterBar() {
+  const bar = $('#products-filter-bar');
+  if (!bar) return;
+  if (!productsFilter) {
+    bar.hidden = true;
+    return;
+  }
+  const cat = categories.find((c) => c.slug === productsFilter);
+  bar.hidden = false;
+  $('#products-filter-name').textContent = cat ? cat.name : productsFilter;
+}
+
+function fillCategoryOptions(selected = '') {
+  const sel = $('#p-category');
+  if (!sel) return;
+  sel.innerHTML =
+    '<option value="">Sin categoría</option>' +
+    categories
+      .map((c) => `<option value="${esc(c.slug)}"${c.slug === selected ? ' selected' : ''}>${esc(c.name)}</option>`)
+      .join('');
+}
+
+async function loadCategories() {
+  try {
+    const data = await api('/api/admin/categories');
+    categories = data.categories || [];
+    fillCategoryOptions();
   } catch (error) {
     showToast(error.message, true);
   }
@@ -216,7 +256,10 @@ function renderProducts() {
           <img class="thumb" src="${esc(thumb)}" alt="" loading="lazy"
                onerror="this.onerror=null;this.src='/placeholder?name=' + encodeURIComponent('${esc(p.name)}')">
         </td>
-        <td><div class="cell-name">${esc(p.name)}</div></td>
+        <td>
+          <div class="cell-name">${esc(p.name)}</div>
+          ${p.category_name ? `<button class="cell-category" data-filter="${esc(p.category)}">${esc(p.category_name)}</button>` : ''}
+        </td>
         <td>${priceCell}</td>
         <td>${discountCell}</td>
         <td>${p.weight ? esc(p.weight) : '<span class="pill pill-muted">—</span>'}</td>
@@ -242,6 +285,23 @@ function renderProducts() {
   tbody.querySelectorAll('[data-delete]').forEach((btn) =>
     btn.addEventListener('click', () => askDelete(Number(btn.dataset.delete)))
   );
+  tbody.querySelectorAll('[data-filter]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      productsFilter = btn.dataset.filter;
+      products = productsAll.filter((p) => p.category === productsFilter);
+      renderProducts();
+      updateProductsFilterBar();
+    })
+  );
+  const clearFilter = $('#products-filter-clear');
+  if (clearFilter) {
+    clearFilter.addEventListener('click', () => {
+      productsFilter = null;
+      products = [...productsAll];
+      renderProducts();
+      updateProductsFilterBar();
+    });
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -268,6 +328,7 @@ function switchView(view) {
   showPanel(view);
   if (view === 'dashboard') renderDashboard();
   if (view === 'discounts') renderDiscounts();
+  if (view === 'categories') loadCategories().then(renderCategoryManager);
   if (view === 'settings' && !currentSettings) loadSettings();
 }
 
@@ -288,6 +349,7 @@ function openEditor(id = null) {
     $('#p-description').value = p.description || '';
     $('#p-price').value = p.price;
     $('#p-weight').value = p.weight || '';
+    fillCategoryOptions(p.category || '');
     $('#p-status').value = p.status;
     $('#p-published').value = String(Number(p.published));
     $('#p-discount_type').value = p.discount_type || 'none';
@@ -296,10 +358,12 @@ function openEditor(id = null) {
     $('#p-discount_start').value = p.discount_start || '';
     $('#p-discount_end').value = p.discount_end || '';
     updateImagePreview(p.image || '');
+    renderVariantsEditor(p.variants || []);
   } else {
     $('#editor-title').textContent = 'Agregar producto';
     $('#editor-sub').textContent = 'Registra una nueva pieza para el catálogo.';
     $('#p-id').value = '';
+    fillCategoryOptions('');
     $('#p-status').value = 'available';
     $('#p-published').value = '1';
     $('#p-discount_type').value = 'none';
@@ -307,6 +371,7 @@ function openEditor(id = null) {
     $('#p-discount_active').checked = false;
     $('#p-discount_start').value = '';
     $('#p-discount_end').value = '';
+    renderVariantsEditor([]);
   }
 
   setActiveTab('new');
@@ -401,13 +466,15 @@ async function saveProduct(event) {
     description: $('#p-description').value.trim(),
     price,
     weight: $('#p-weight').value.trim(),
+    category: $('#p-category').value,
     status: $('#p-status').value,
     published: $('#p-published').value === '1',
     discount_type: type,
     discount_value: value,
     discount_active: $('#p-discount_active').checked,
     discount_start: start,
-    discount_end: end
+    discount_end: end,
+    variants: readVariantsEditor()
   };
   if (pendingImage) payload.image = pendingImage;
 
@@ -435,6 +502,141 @@ async function saveProduct(event) {
 function showFormError(el, message) {
   el.textContent = message;
   el.hidden = false;
+}
+
+/* ------------------------------------------------------------------ */
+/* Editor de variantes de producto                                    */
+/* ------------------------------------------------------------------ */
+
+function nextVariantId() {
+  return variantIdSeed++;
+}
+
+function renderVariantsEditor(groups) {
+  const container = $('#variant-groups');
+  editorVariants = (groups || []).map((g) => ({
+    _gid: nextVariantId(),
+    name: g.name || '',
+    required: !!g.required,
+    options: (g.options || []).map((o) => ({
+      _oid: nextVariantId(),
+      label: o.label || '',
+      color: o.color || '',
+      available: o.available !== false
+    }))
+  }));
+
+  const render = () => {
+    if (!editorVariants.length) {
+      container.innerHTML =
+        '<p class="empty-note variants-empty">Sin variantes. Añade grupos de color, talla u otra opción.</p>';
+      bindEmpty();
+      return;
+    }
+    container.innerHTML = editorVariants
+      .map(
+        (g) => `
+      <div class="variant-group-box" data-gid="${g._gid}">
+        <div class="vg-head">
+          <input type="text" class="vg-name" value="${esc(g.name)}" maxlength="80"
+                 placeholder="Nombre del grupo (ej. Color de hilo)" aria-label="Nombre del grupo de variantes">
+          <label class="switch switch-mini">
+            <input type="checkbox" class="vg-required" ${g.required ? 'checked' : ''}>
+            <span>Obligatorio</span>
+          </label>
+          <button type="button" class="icon-action danger vg-remove" title="Quitar grupo" aria-label="Quitar grupo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div class="vg-options">
+          ${g.options
+            .map(
+              (o) => `
+          <div class="vg-option" data-oid="${o._oid}">
+            <label class="color-field" title="Color de la muestra (opcional)">
+              <input type="color" class="vo-color" value="${esc(o.color || '#d8be69')}" aria-label="Color de la muestra">
+            </label>
+            <input type="text" class="vo-label" value="${esc(o.label)}" maxlength="80"
+                   placeholder="Opción (ej. Azul)" aria-label="Nombre de la opción">
+            <label class="switch switch-mini">
+              <input type="checkbox" class="vo-available" ${o.available ? 'checked' : ''}>
+              <span>Disponible</span>
+            </label>
+            <button type="button" class="icon-action danger vo-remove" title="Quitar opción" aria-label="Quitar opción">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>`
+            )
+            .join('')}
+        </div>
+        <button type="button" class="btn btn-ghost btn-small vg-opt-add" data-gid="${g._gid}">+ Opción</button>
+      </div>`
+      )
+      .join('');
+    bindGroupEvents();
+  };
+
+  const bindEmpty = () => {};
+
+  const findGroup = (gid) => editorVariants.find((g) => g._gid === gid);
+
+  const bindGroupEvents = () => {
+    container.querySelectorAll('.variant-group-box').forEach((box) => {
+      const gid = Number(box.dataset.gid);
+      const group = findGroup(gid);
+
+      box.querySelector('.vg-name').addEventListener('input', (e) => {
+        group.name = e.target.value;
+      });
+      box.querySelector('.vg-required').addEventListener('change', (e) => {
+        group.required = e.target.checked;
+      });
+      box.querySelector('.vg-remove').addEventListener('click', () => {
+        editorVariants = editorVariants.filter((g) => g._gid !== gid);
+        render();
+      });
+      box.querySelector('.vg-opt-add').addEventListener('click', () => {
+        group.options.push({ _oid: nextVariantId(), label: '', color: '', available: true });
+        render();
+      });
+
+      box.querySelectorAll('.vg-option').forEach((optBox) => {
+        const oid = Number(optBox.dataset.oid);
+        const option = group.options.find((o) => o._oid === oid);
+        optBox.querySelector('.vo-label').addEventListener('input', (e) => {
+          option.label = e.target.value;
+        });
+        optBox.querySelector('.vo-color').addEventListener('input', (e) => {
+          option.color = e.target.value;
+        });
+        optBox.querySelector('.vo-available').addEventListener('change', (e) => {
+          option.available = e.target.checked;
+        });
+        optBox.querySelector('.vo-remove').addEventListener('click', () => {
+          group.options = group.options.filter((o) => o._oid !== oid);
+          render();
+        });
+      });
+    });
+  };
+
+  render();
+}
+
+function readVariantsEditor() {
+  return editorVariants
+    .filter((g) => g.name.trim())
+    .map((g) => ({
+      name: g.name.trim(),
+      required: !!g.required,
+      options: g.options
+        .filter((o) => o.label.trim())
+        .map((o) => ({
+          label: o.label.trim(),
+          color: o.color.trim(),
+          available: o.available !== false
+        }))
+    }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -579,6 +781,177 @@ function renderDiscounts() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Categorías                                                         */
+/* ------------------------------------------------------------------ */
+
+function renderCategoryManager() {
+  const list = $('#category-list');
+  const empty = $('#categories-empty');
+  if (!list) return;
+  empty.hidden = categories.length > 0;
+
+  list.innerHTML = categories
+    .map(
+      (c) => `
+    <div class="category-row" data-slug="${esc(c.slug)}">
+      <div class="category-row-main">
+        <input type="text" class="category-rename" value="${esc(c.name)}" maxlength="60"
+               aria-label="Nombre de la categoría">
+        <span class="pill pill-gold">${c.product_count} ${c.product_count === 1 ? 'producto' : 'productos'}</span>
+      </div>
+      <div class="category-row-actions">
+        <button type="button" class="btn btn-gold btn-small cat-save">Guardar</button>
+        <button type="button" class="icon-action danger cat-delete" title="Eliminar categoría" aria-label="Eliminar categoría">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+        </button>
+      </div>
+    </div>`
+    )
+    .join('');
+
+  list.querySelectorAll('.category-row').forEach((row) => {
+    const slug = row.dataset.slug;
+    row.querySelector('.cat-save').addEventListener('click', async () => {
+      const btn = row.querySelector('.cat-save');
+      const name = row.querySelector('.category-rename').value.trim();
+      if (name.length < 2) {
+        showToast('El nombre debe tener al menos 2 caracteres.', true);
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        await api('/api/admin/categories/' + encodeURIComponent(slug), { method: 'PUT', body: { name } });
+        showToast('Categoría actualizada.');
+        await loadCategories();
+        renderCategoryManager();
+      } catch (error) {
+        showToast(error.message, true);
+        btn.disabled = false;
+        btn.textContent = 'Guardar';
+      }
+    });
+
+    row.querySelector('.cat-delete').addEventListener('click', async () => {
+      const btn = row.querySelector('.cat-delete');
+      btn.disabled = true;
+      try {
+        await api('/api/admin/categories/' + encodeURIComponent(slug), { method: 'DELETE' });
+        showToast('Categoría eliminada.');
+        await loadCategories();
+        renderCategoryManager();
+      } catch (error) {
+        btn.disabled = false;
+        showToast(error.message, true);
+      }
+    });
+  });
+}
+
+async function createCategory() {
+  const input = $('#cat-name');
+  const name = input.value.trim();
+  if (name.length < 2) {
+    showToast('El nombre debe tener al menos 2 caracteres.', true);
+    return;
+  }
+  const btn = $('#cat-create');
+  btn.disabled = true;
+  btn.textContent = 'Creando…';
+  try {
+    await api('/api/admin/categories', { method: 'POST', body: { name } });
+    input.value = '';
+    showToast('Categoría creada.');
+    await loadCategories();
+    renderCategoryManager();
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear categoría';
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Respaldo y restauración                                            */
+/* ------------------------------------------------------------------ */
+
+let pendingRestore = null;
+let restoreTimer = null;
+
+async function downloadBackup() {
+  const btn = $('#backup-download');
+  btn.disabled = true;
+  btn.textContent = 'Generando…';
+  try {
+    const data = await api('/api/admin/backup');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `zhendor-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast('Respaldo descargado. Guárdalo en un lugar seguro.');
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Descargar respaldo (.json)';
+  }
+}
+
+function handleBackupFile(file) {
+  if (!file) return;
+  const confirmBtn = $('#backup-restore-confirm');
+  confirmBtn.hidden = true;
+  if (file.size > 60 * 1024 * 1024) {
+    showToast('El archivo de respaldo es demasiado grande.', true);
+    return;
+  }
+  file
+    .text()
+    .then((text) => {
+      JSON.parse(text); // valida que sea JSON antes de mostrar el botón
+      pendingRestore = text;
+      confirmBtn.textContent = `¿Restaurar «${file.name}»?`;
+      confirmBtn.hidden = false;
+      clearTimeout(restoreTimer);
+      restoreTimer = setTimeout(() => {
+        pendingRestore = null;
+        confirmBtn.hidden = true;
+      }, 8000);
+    })
+    .catch(() => showToast('El archivo no es un respaldo válido (.json).', true));
+}
+
+async function confirmRestore() {
+  if (!pendingRestore) return;
+  const btn = $('#backup-restore-confirm');
+  btn.disabled = true;
+  btn.textContent = 'Restaurando…';
+  try {
+    await api('/api/admin/restore', { method: 'POST', body: JSON.parse(pendingRestore) });
+    pendingRestore = null;
+    btn.hidden = true;
+    showToast('Respaldo restaurado. La tienda volvió a su estado guardado.');
+    const settingsWasLoaded = currentSettings !== null;
+    await Promise.all([
+      loadProducts(),
+      loadCategories(),
+      settingsWasLoaded ? loadSettings() : Promise.resolve()
+    ]);
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '¿Restaurar ahora?';
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Configuración                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -687,6 +1060,27 @@ function initEvents() {
   $('#confirm-delete').addEventListener('click', confirmDelete);
   $('#settings-form').addEventListener('submit', saveSettings);
 
+  $('#variant-group-add').addEventListener('click', () => {
+    editorVariants.push({ _gid: nextVariantId(), name: '', required: false, options: [] });
+    renderVariantsEditor(editorVariants);
+  });
+
+  $('#cat-create').addEventListener('click', createCategory);
+  $('#cat-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      createCategory();
+    }
+  });
+
+  $('#backup-download').addEventListener('click', downloadBackup);
+  $('#backup-restore-pick').addEventListener('click', () => $('#backup-file').click());
+  $('#backup-file').addEventListener('change', (e) => {
+    if (e.target.files[0]) handleBackupFile(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('#backup-restore-confirm').addEventListener('click', confirmRestore);
+
   ['#p-discount_type', '#p-discount_value', '#p-discount_start', '#p-discount_end', '#p-discount_active', '#p-price']
     .forEach((sel) => {
       $(sel).addEventListener('input', () => updateDiscountPreview());
@@ -744,7 +1138,7 @@ async function init() {
     return; // api() ya redirige a /login si no hay sesión
   }
   initEvents();
-  await loadProducts();
+  await Promise.all([loadProducts(), loadCategories()]);
   switchView('dashboard');
 }
 
