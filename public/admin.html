@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Administración — ZHEND’OR Joyería</title>
+  <meta name="robots" content="noindex">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23F5EED9'/%3E%3Cpath d='M32 8 L50 32 L32 56 L14 32 Z' fill='none' stroke='%23D8BE69' stroke-width='3'/%3E%3Cpath d='M32 20 L42 32 L32 44 L22 32 Z' fill='%23E8D58B'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="admin-body">
+
+  <header class="admin-topbar">
+    <a class="admin-brand" href="/" target="_blank" rel="noopener">
+      <span class="admin-name">ZHEND’OR</span>
+      <span class="admin-tagline">Joyería</span>
+    </a>
+    <nav class="admin-tabs" id="admin-tabs">
+      <button class="tab is-active" data-view="dashboard">Resumen</button>
+      <button class="tab" data-view="products">Productos</button>
+      <button class="tab" data-view="new">Agregar producto</button>
+      <button class="tab" data-view="discounts">Descuentos</button>
+      <button class="tab" data-view="settings">Configuración</button>
+    </nav>
+    <div class="admin-actions">
+      <a class="link-view" href="/" target="_blank" rel="noopener">Ver tienda ↗</a>
+      <button class="btn btn-ghost btn-small" id="logout-btn">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <main class="admin-main">
+
+    <!-- ============ VISTA RESUMEN ============ -->
+    <section class="view" data-view-panel="dashboard" id="view-dashboard">
+      <div class="view-head">
+        <div>
+          <h1>Resumen</h1>
+          <p class="view-sub">Estado general de la tienda ZHEND’OR Joyería.</p>
+        </div>
+        <button class="btn btn-gold btn-small" id="dash-new-btn">+ Nuevo producto</button>
+      </div>
+
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value" id="stat-total">—</span>
+          <span class="stat-label">Productos</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-published">—</span>
+          <span class="stat-label">Publicados</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-out">—</span>
+          <span class="stat-label">Agotados</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-discounts">—</span>
+          <span class="stat-label">Con descuento activo</span>
+        </div>
+      </div>
+
+      <div class="dash-actions">
+        <button class="dash-action" data-view="products">
+          <strong>Productos</strong>
+          <span>Edita precios e imágenes del catálogo</span>
+        </button>
+        <button class="dash-action" data-view="discounts">
+          <strong>Descuentos</strong>
+          <span>Crea ofertas por porcentaje o valor fijo</span>
+        </button>
+        <button class="dash-action" data-view="settings">
+          <strong>Configuración</strong>
+          <span>WhatsApp, envío y datos de la marca</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ============ VISTA PRODUCTOS ============ -->
+    <section class="view" data-view-panel="products" id="view-products" hidden>
+      <div class="view-head">
+        <div>
+          <h1>Productos</h1>
+          <p class="view-sub">Administra el catálogo visible en la tienda.</p>
+        </div>
+        <button class="btn btn-gold btn-small" id="new-product-btn">+ Nuevo producto</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Foto</th>
+              <th>Producto</th>
+              <th>Precio</th>
+              <th>Descuento</th>
+              <th>Presentación</th>
+              <th>Estado</th>
+              <th>Publicado</th>
+              <th class="th-actions">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="products-tbody"></tbody>
+        </table>
+      </div>
+      <p class="empty-note" id="products-empty" hidden>No hay productos todavía. Crea el primero.</p>
+    </section>
+
+    <!-- ============ VISTA AGREGAR / EDITAR PRODUCTO ============ -->
+    <section class="view" data-view-panel="editor" id="view-editor" hidden>
+      <div class="view-head">
+        <div>
+          <h1 id="editor-title">Agregar producto</h1>
+          <p class="view-sub" id="editor-sub">Registra una nueva pieza para el catálogo.</p>
+        </div>
+        <button class="btn btn-ghost btn-small" id="editor-back">← Volver a productos</button>
+      </div>
+
+      <form class="editor-card" id="product-form" novalidate>
+        <input type="hidden" id="p-id">
+
+        <div class="product-form-grid">
+          <div class="product-form-fields">
+            <div class="field">
+              <label for="p-name">Nombre del producto</label>
+              <input type="text" id="p-name" maxlength="120" required>
+            </div>
+            <div class="field">
+              <label for="p-description">Descripción</label>
+              <textarea id="p-description" rows="3" maxlength="2000"></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="p-price">Precio normal (COP)</label>
+                <input type="number" id="p-price" min="1" step="1000" required placeholder="Ej. 150000">
+              </div>
+              <div class="field">
+                <label for="p-weight">Peso / presentación</label>
+                <input type="text" id="p-weight" maxlength="80" placeholder="Ej. 18 g, Aro 1,5 mm">
+              </div>
+            </div>
+
+            <fieldset class="discount-fieldset">
+              <legend>Descuento (opcional)</legend>
+              <div class="field-row">
+                <div class="field">
+                  <label for="p-discount_type">Tipo de descuento</label>
+                  <select id="p-discount_type">
+                    <option value="none">Sin descuento</option>
+                    <option value="percent">Porcentaje (%)</option>
+                    <option value="fixed">Valor fijo (COP)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="p-discount_value">Valor del descuento</label>
+                  <input type="number" id="p-discount_value" min="0" step="1" value="0">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="p-discount_start">Fecha de inicio</label>
+                  <input type="date" id="p-discount_start">
+                </div>
+                <div class="field">
+                  <label for="p-discount_end">Fecha de fin</label>
+                  <input type="date" id="p-discount_end">
+                </div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="p-discount_active">
+                <span>Descuento activo</span>
+              </label>
+              <p class="discount-preview" id="p-discount-preview"></p>
+            </fieldset>
+
+            <div class="field-row">
+              <div class="field">
+                <label for="p-status">Disponibilidad</label>
+                <select id="p-status">
+                  <option value="available">Disponible</option>
+                  <option value="out_of_stock">Agotado</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="p-published">Estado de publicación</label>
+                <select id="p-published">
+                  <option value="1">Publicado</option>
+                  <option value="0">Oculto</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="product-form-image">
+            <label>Fotografía del producto</label>
+            <div class="image-drop" id="image-drop">
+              <img id="p-image-preview" alt="" hidden>
+              <div class="image-drop-hint" id="image-drop-hint">
+                <span>Haz clic o arrastra una imagen</span>
+                <small>PNG, JPG o WebP · máx. 8 MB</small>
+              </div>
+            </div>
+            <input type="file" id="p-image" accept="image/png,image/jpeg,image/webp" hidden>
+            <button type="button" class="btn btn-ghost btn-small" id="p-image-remove">Quitar imagen</button>
+          </div>
+        </div>
+
+        <p class="form-error" id="product-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="product-cancel">Cancelar</button>
+          <button type="submit" class="btn btn-gold" id="product-save">Guardar producto</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============ VISTA DESCUENTOS ============ -->
+    <section class="view" data-view-panel="discounts" id="view-discounts" hidden>
+      <div class="view-head">
+        <div>
+          <h1>Descuentos</h1>
+          <p class="view-sub">Crea ofertas sin cambiar el precio original. El precio final se calcula automáticamente.</p>
+        </div>
+      </div>
+      <div class="discounts-list" id="discounts-list"></div>
+      <p class="empty-note" id="discounts-empty" hidden>Aún no hay productos para descontar.</p>
+    </section>
+
+    <!-- ============ VISTA CONFIGURACIÓN ============ -->
+    <section class="view" data-view-panel="settings" id="view-settings" hidden>
+      <div class="view-head">
+        <div>
+          <h1>Configuración de la marca</h1>
+          <p class="view-sub">Nombre, logotipo, WhatsApp, contacto y textos del sitio.</p>
+        </div>
+      </div>
+
+      <form class="settings-card" id="settings-form" novalidate>
+        <div class="settings-grid">
+          <div class="field">
+            <label for="s-brand_name">Nombre comercial</label>
+            <input type="text" id="s-brand_name" maxlength="60" required>
+          </div>
+          <div class="field">
+            <label for="s-tagline">Subtítulo / categoría</label>
+            <input type="text" id="s-tagline" maxlength="60">
+          </div>
+          <div class="field">
+            <label for="s-slogan">Lema (portada, en dorado)</label>
+            <input type="text" id="s-slogan" maxlength="60" placeholder="Tu historia">
+          </div>
+          <div class="field">
+            <label for="s-whatsapp">WhatsApp (con prefijo internacional)</label>
+            <input type="text" id="s-whatsapp" maxlength="20" placeholder="573001234567">
+            <small class="hint">Solo dígitos. Ej. Colombia: 57 + número.</small>
+          </div>
+          <div class="field">
+            <label for="s-shipping_cost">Costo de envío (COP)</label>
+            <input type="number" id="s-shipping_cost" min="0" step="1000" placeholder="Vacío = por confirmar">
+            <small class="hint">Déjalo vacío si el envío se confirma por WhatsApp.</small>
+          </div>
+          <div class="field">
+            <label for="s-contact_phone">Teléfono de contacto</label>
+            <input type="text" id="s-contact_phone" maxlength="40">
+          </div>
+          <div class="field">
+            <label for="s-contact_email">Correo de contacto</label>
+            <input type="email" id="s-contact_email" maxlength="120">
+          </div>
+          <div class="field field-wide">
+            <label for="s-address">Dirección</label>
+            <input type="text" id="s-address" maxlength="200">
+          </div>
+          <div class="field field-wide">
+            <label for="s-hero_phrase">Frase de portada</label>
+            <input type="text" id="s-hero_phrase" maxlength="300">
+          </div>
+          <div class="field field-wide">
+            <label for="s-description">Descripción de la marca</label>
+            <textarea id="s-description" rows="4" maxlength="5000"></textarea>
+          </div>
+          <div class="field field-wide">
+            <label for="s-footer_text">Texto del pie de página</label>
+            <input type="text" id="s-footer_text" maxlength="300">
+          </div>
+          <div class="field field-wide">
+            <label>Logotipo</label>
+            <div class="logo-editor">
+              <div class="logo-preview" id="logo-preview">
+                <span class="logo-placeholder">ZHEND’OR</span>
+              </div>
+              <div class="logo-controls">
+                <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp" hidden>
+                <button type="button" class="btn btn-ghost btn-small" id="logo-pick">Elegir imagen</button>
+                <button type="button" class="btn btn-ghost btn-small" id="logo-remove">Quitar</button>
+                <small class="hint">PNG, JPG o WebP. Si no hay logo se usa el logotipo tipográfico.</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p class="form-error" id="settings-error" hidden></p>
+        <div class="settings-actions">
+          <button type="submit" class="btn btn-gold" id="settings-save">Guardar cambios</button>
+        </div>
+      </form>
+
+      <div class="danger-zone">
+        <div>
+          <h3>Cerrar sesión</h3>
+          <p>Finaliza tu sesión de administración en este dispositivo.</p>
+        </div>
+        <button class="btn btn-ghost" id="logout-btn-2">Cerrar sesión</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============ MODAL CONFIRMACIÓN ============ -->
+  <div class="modal" id="confirm-modal" hidden>
+    <div class="modal-overlay" data-close></div>
+    <div class="modal-card confirm-card">
+      <h2 class="modal-title">Eliminar producto</h2>
+      <p class="confirm-text" id="confirm-text">¿Seguro que deseas eliminar este producto?</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close>Cancelar</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>

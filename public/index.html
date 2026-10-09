@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>ZHEND’OR Joyería</title>
+  <meta name="description" content="ZHEND’OR Joyería — elegancia discreta, piezas doradas con alma natural. Compra directamente por WhatsApp.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23F5EED9'/%3E%3Cpath d='M32 8 L50 32 L32 56 L14 32 Z' fill='none' stroke='%23D8BE69' stroke-width='3'/%3E%3Cpath d='M32 20 L42 32 L32 44 L22 32 Z' fill='%23E8D58B'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Filtro de desenfoque compartido por las sombras botánicas -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="softBlur" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="7"/>
+      </filter>
+      <filter id="softBlurWide" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="14"/>
+      </filter>
+      <g id="leafShape">
+        <path d="M0 0 C 34 30 44 84 10 134 C 3 142 -3 142 -10 134 C -44 84 -34 30 0 0 Z"/>
+        <path class="leaf-vein" d="M0 8 C 3 48 1 96 -1 128" fill="none"/>
+      </g>
+      <g id="leafTall">
+        <path d="M0 0 C 26 44 30 108 4 172 C 1 179 -1 179 -4 172 C -30 108 -26 44 0 0 Z"/>
+        <path class="leaf-vein" d="M0 10 C 2 66 1 122 -1 164" fill="none"/>
+      </g>
+    </defs>
+  </svg>
+
+  <!-- ======================= ENCABEZADO ======================= -->
+  <header class="site-header" id="site-header">
+    <div class="header-inner">
+      <a class="brand" href="#inicio" id="brand-link" aria-label="ZHEND'OR Joyería - Inicio">
+        <img class="brand-logo-img" id="brand-logo-img" src="" alt="" hidden>
+        <span class="brand-wordmark" id="brand-wordmark">
+          <span class="brand-name" id="brand-name">ZHEND’OR</span>
+          <span class="brand-tagline" id="brand-tagline">Joyería</span>
+        </span>
+      </a>
+
+      <nav class="main-nav" id="main-nav" aria-label="Navegación principal">
+        <a href="#inicio" class="nav-link">Inicio</a>
+        <a href="#coleccion" class="nav-link">Colección</a>
+        <a href="#contacto" class="nav-link">Contacto</a>
+      </nav>
+
+      <div class="header-actions">
+        <a class="icon-button" id="orders-link" href="#contacto" title="Pedidos por WhatsApp" aria-label="Pedidos por WhatsApp">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 7h12l1.2 12.2a1.8 1.8 0 0 1-1.8 1.8H6.6a1.8 1.8 0 0 1-1.8-1.8L6 7Z"/>
+            <path d="M9 10V6a3 3 0 0 1 6 0v4"/>
+          </svg>
+        </a>
+        <button class="icon-button menu-toggle" id="menu-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="main-nav">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ======================= PORTADA ======================= -->
+    <section class="hero" id="inicio">
+      <div class="hero-light" aria-hidden="true"></div>
+
+      <svg class="botanical botanical-tl" viewBox="-60 -60 320 340" aria-hidden="true">
+        <g filter="url(#softBlurWide)" opacity="0.5" fill="#c9b373">
+          <use href="#leafTall" transform="translate(30,20) rotate(-58) scale(1.15)"/>
+          <use href="#leafShape" transform="translate(78,96) rotate(-18) scale(0.95)"/>
+          <use href="#leafShape" transform="translate(24,120) rotate(-95) scale(0.8)"/>
+        </g>
+        <g filter="url(#softBlur)" opacity="0.35" fill="#a98f52">
+          <use href="#leafTall" transform="translate(-18,-8) rotate(-34) scale(0.9)"/>
+          <use href="#leafShape" transform="translate(120,40) rotate(12) scale(0.7)"/>
+        </g>
+      </svg>
+
+      <svg class="botanical botanical-br" viewBox="-60 -60 320 340" aria-hidden="true">
+        <g filter="url(#softBlurWide)" opacity="0.5" fill="#c9b373">
+          <use href="#leafTall" transform="translate(270,300) rotate(125) scale(1.1)"/>
+          <use href="#leafShape" transform="translate(222,214) rotate(162) scale(0.95)"/>
+          <use href="#leafShape" transform="translate(278,190) rotate(75) scale(0.8)"/>
+        </g>
+        <g filter="url(#softBlur)" opacity="0.35" fill="#a98f52">
+          <use href="#leafTall" transform="translate(320,318) rotate(160) scale(0.9)"/>
+          <use href="#leafShape" transform="translate(182,262) rotate(192) scale(0.7)"/>
+        </g>
+      </svg>
+
+      <div class="hero-content">
+        <p class="hero-eyebrow">— desde el corazón de la naturaleza —</p>
+        <h1 class="hero-brand" id="hero-brand">ZHEND’OR</h1>
+        <p class="hero-tagline" id="hero-tagline">Joyería</p>
+        <div class="hero-divider" aria-hidden="true">
+          <span></span><i></i><span></span>
+        </div>
+        <p class="hero-phrase" id="hero-phrase">La belleza eterna, forjada con luz y oro</p>
+        <a href="#coleccion" class="btn btn-outline-gold hero-cta">Descubrir colección</a>
+      </div>
+
+      <a class="hero-scroll" href="#coleccion" aria-label="Ir a la colección">
+        <span class="hero-scroll-line"></span>
+      </a>
+    </section>
+
+    <!-- ======================= COLECCIÓN ======================= -->
+    <section class="section collection" id="coleccion">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="section-eyebrow">Nuestra colección</p>
+          <h2 class="section-title">Piezas con alma</h2>
+          <p class="section-sub">Cada joya se presenta con luz natural, tal cual es. Selecciona la tuya y escríbenos por WhatsApp para reservarla.</p>
+        </header>
+
+        <div class="product-grid" id="product-grid" aria-live="polite"></div>
+
+        <p class="catalog-note" id="catalog-note" hidden></p>
+      </div>
+    </section>
+
+    <!-- ======================= BANDA DORADA ======================= -->
+    <section class="band" id="band">
+      <img class="band-img" id="band-img"
+           src="https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=1600&q=80"
+           alt="Joyas doradas con luz cálida"
+           data-name="ZHEND’OR">
+      <div class="band-overlay">
+        <p class="band-quote reveal">“La elegancia no llama la atención,<br>la invita a pasar.”</p>
+      </div>
+    </section>
+
+    <!-- ======================= MARCA ======================= -->
+    <section class="section about" id="marca">
+      <div class="container about-inner reveal">
+        <p class="section-eyebrow">Nuestra filosofía</p>
+        <h2 class="section-title">ZHEND’OR Joyería</h2>
+        <div class="leaf-divider" aria-hidden="true">
+          <svg viewBox="0 0 120 24" class="leaf-divider-svg">
+            <line x1="0" y1="12" x2="44" y2="12"/>
+            <path d="M60 2 C 66 7 68 14 60 22 C 52 14 54 7 60 2 Z"/>
+            <line x1="76" y1="12" x2="120" y2="12"/>
+          </svg>
+        </div>
+        <p class="about-text" id="about-text"></p>
+      </div>
+    </section>
+
+    <!-- ======================= CONTACTO ======================= -->
+    <section class="section contact" id="contacto">
+      <div class="container">
+        <header class="section-head reveal">
+          <p class="section-eyebrow">Contacto</p>
+          <h2 class="section-title">Te acompañamos</h2>
+          <p class="section-sub">Escríbenos para resolver dudas, apartar una pieza o coordinar tu entrega.</p>
+        </header>
+
+        <div class="contact-grid">
+          <div class="contact-card reveal" id="contact-card">
+            <div class="contact-rows" id="contact-rows"></div>
+          </div>
+          <div class="contact-card whatsapp-card reveal">
+            <h3 class="contact-card-title">¿Lista para tu pieza?</h3>
+            <p class="contact-card-text">Atendemos tu pedido directamente por WhatsApp, con atención personalizada.</p>
+            <a class="btn btn-gold" id="contact-whatsapp" href="#" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.6-6.1c-.3-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.3-.7.8-.8 1-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4 0-.5.2-.7l.4-.5c.1-.1.1-.3 0-.4l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.9.9-1.1 2.2-.2 3.9a11.6 11.6 0 0 0 4.5 4.2c1.7.8 2.4.9 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.1-.4-.2Z"/></svg>
+              Escribir por WhatsApp
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ======================= PIE DE PÁGINA ======================= -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img class="footer-logo-img" id="footer-logo-img" src="" alt="" hidden>
+        <div class="footer-wordmark">
+          <span class="footer-name" id="footer-name">ZHEND’OR</span>
+          <span class="footer-tagline" id="footer-tagline">Joyería</span>
+        </div>
+        <p class="footer-text" id="footer-text"></p>
+      </div>
+      <nav class="footer-nav" aria-label="Navegación del pie de página">
+        <h4>Explorar</h4>
+        <a href="#inicio">Inicio</a>
+        <a href="#coleccion">Colección</a>
+        <a href="#marca">Nuestra filosofía</a>
+        <a href="#contacto">Contacto</a>
+      </nav>
+      <div class="footer-contact">
+        <h4>Contacto</h4>
+        <div class="footer-rows" id="footer-rows"></div>
+        <a class="footer-whatsapp" id="footer-whatsapp" href="#" target="_blank" rel="noopener">WhatsApp</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="container">
+        <p>© <span id="year"></span> <span id="footer-brand-inline">ZHEND’OR</span> Joyería. Todos los derechos reservados.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ======================= MODAL PRODUCTO ======================= -->
+  <div class="modal" id="product-modal" role="dialog" aria-modal="true" aria-labelledby="pm-title" hidden>
+    <div class="modal-overlay" data-close></div>
+    <div class="modal-card product-modal-card">
+      <button class="modal-close" data-close aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="pm-media">
+        <img id="pm-image" src="" alt="" data-name="">
+      </div>
+      <div class="pm-body">
+        <h3 class="pm-title" id="pm-title"></h3>
+        <p class="pm-price" id="pm-price"></p>
+        <p class="pm-weight" id="pm-weight"></p>
+        <p class="pm-availability" id="pm-availability"></p>
+        <p class="pm-description" id="pm-description"></p>
+        <div class="pm-actions" id="pm-actions">
+          <label class="qty-label" for="pm-qty">Cantidad</label>
+          <div class="qty-stepper">
+            <button type="button" class="qty-btn" id="pm-minus" aria-label="Disminuir">−</button>
+            <input type="number" id="pm-qty" min="1" max="99" value="1" inputmode="numeric">
+            <button type="button" class="qty-btn" id="pm-plus" aria-label="Aumentar">+</button>
+          </div>
+          <button class="btn btn-gold pm-buy" id="pm-buy">Comprar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= MODAL CHECKOUT ======================= -->
+  <div class="modal" id="checkout-modal" role="dialog" aria-modal="true" aria-labelledby="co-title" hidden>
+    <div class="modal-overlay" data-close></div>
+    <div class="modal-card checkout-card">
+      <button class="modal-close" data-close aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+
+      <div class="co-head">
+        <p class="co-eyebrow">Tu pedido</p>
+        <h3 class="co-title" id="co-title">Completar pedido</h3>
+        <p class="co-sub">Revisa los detalles y continúa por WhatsApp para confirmar con la tienda.</p>
+      </div>
+
+      <div class="co-summary" id="co-summary"></div>
+
+      <form class="co-form" id="co-form" novalidate>
+        <div class="field">
+          <label for="co-name">Nombre completo</label>
+          <input type="text" id="co-name" name="name" autocomplete="name" maxlength="120" required>
+        </div>
+        <div class="field">
+          <label for="co-phone">Número de teléfono</label>
+          <input type="tel" id="co-phone" name="phone" autocomplete="tel" maxlength="30" required>
+        </div>
+        <div class="field">
+          <label for="co-city">Ciudad</label>
+          <input type="text" id="co-city" name="city" autocomplete="address-level2" maxlength="80" required>
+        </div>
+        <div class="field">
+          <label for="co-address">Dirección de entrega</label>
+          <input type="text" id="co-address" name="address" autocomplete="street-address" maxlength="200" required>
+        </div>
+        <div class="field">
+          <label for="co-notes">Observaciones <span class="optional">(opcional)</span></label>
+          <textarea id="co-notes" name="notes" rows="2" maxlength="500"></textarea>
+        </div>
+
+        <p class="co-error" id="co-error" hidden></p>
+
+        <button type="submit" class="btn btn-gold co-submit" id="co-submit">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.6-6.1c-.3-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.3-.7.8-.8 1-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4 0-.5.2-.7l.4-.5c.1-.1.1-.3 0-.4l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.9.9-1.1 2.2-.2 3.9a11.6 11.6 0 0 0 4.5 4.2c1.7.8 2.4.9 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.1-.4-.2Z"/></svg>
+          Continuar por WhatsApp
+        </button>
+        <p class="co-note">Se abrirá WhatsApp con tu mensaje listo. El pedido se confirma al enviarlo tú desde la aplicación.</p>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="/js/message.js"></script>
+  <script src="/js/site.js"></script>
+</body>
+</html>

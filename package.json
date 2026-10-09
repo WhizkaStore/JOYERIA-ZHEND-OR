@@ -1,0 +1,16 @@
+{
+  "name": "zhendor-joyeria",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tienda virtual ZHEND'OR Joyería — catálogo administrable y compras por WhatsApp",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "test": "node --disable-warning=ExperimentalWarning test/smoke.mjs",
+    "test:responsive": "node --disable-warning=ExperimentalWarning test/responsive.mjs",
+    "set-admin": "node --disable-warning=ExperimentalWarning scripts/set-admin.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

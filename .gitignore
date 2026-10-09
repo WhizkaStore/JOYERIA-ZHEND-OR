@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+
+# Entorno (nunca subir credenciales reales)
+.env
+
+# Base de datos y archivos subidos (se generan en tiempo de ejecución)
+data/
+uploads/
+
+# Registros y sistema
+*.log
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
