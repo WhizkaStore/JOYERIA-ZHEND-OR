@@ -7,7 +7,8 @@
  */
 
 function toInt(value) {
-  const n = Number.parseInt(value, 10);
+  const digits = String(value ?? '').replace(/[^\d]/g, '');
+  const n = Number.parseInt(digits, 10);
   return Number.isFinite(n) ? n : 0;
 }
 

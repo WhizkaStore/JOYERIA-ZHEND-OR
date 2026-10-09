@@ -74,7 +74,9 @@ El comando actualiza el usuario y/o la contraseña, guarda el hash `scrypt` y
 En el panel, pestaña **Productos**:
 
 - **Nuevo producto**: nombre, descripción, precio (COP), presentación, estado
-  (disponible / agotado), publicación (publicado / oculto) y fotografía.
+  (disponible / agotado), publicación (publicado / oculto) y fotografía. El
+  precio se escribe sin decimales y puedes usar puntos como separador de miles
+  (por ejemplo `113.900` = 113900).
 - **Editar** (lápiz) y **Eliminar** (papelera, con confirmación).
 - Los productos **ocultos** no aparecen en la tienda.
 - Los productos **agotados** se muestran con la etiqueta «Agotado» y **no

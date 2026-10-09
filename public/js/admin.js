@@ -24,6 +24,12 @@ const money = (value) =>
     maximumFractionDigits: 0
   }).format(Number(value) || 0);
 
+// Convierte valores numéricos escritos con separadores (ej. "113.900") a enteros.
+const copInt = (value) => {
+  const n = Number.parseInt(String(value ?? '').replace(/[^\d]/g, ''), 10);
+  return Number.isFinite(n) ? n : NaN;
+};
+
 /* ------------------------------------------------------------------ */
 /* Cliente API (usa la cookie de sesión automáticamente)              */
 /* ------------------------------------------------------------------ */
@@ -312,9 +318,9 @@ function openEditor(id = null) {
 
 function readEditorDiscount() {
   return {
-    price: Number.parseInt($('#p-price').value, 10) || 0,
+    price: copInt($('#p-price').value) || 0,
     discount_type: $('#p-discount_type').value,
-    discount_value: Number.parseInt($('#p-discount_value').value, 10) || 0,
+    discount_value: copInt($('#p-discount_value').value) || 0,
     discount_active: $('#p-discount_active').checked,
     discount_start: $('#p-discount_start').value,
     discount_end: $('#p-discount_end').value
@@ -366,9 +372,9 @@ async function saveProduct(event) {
 
   const id = $('#p-id').value;
   const name = $('#p-name').value.trim();
-  const price = Number.parseInt($('#p-price').value, 10);
+  const price = copInt($('#p-price').value);
   const type = $('#p-discount_type').value;
-  const value = Number.parseInt($('#p-discount_value').value, 10) || 0;
+  const value = copInt($('#p-discount_value').value) || 0;
 
   if (name.length < 2) {
     return showFormError(errorEl, 'El nombre debe tener al menos 2 caracteres.');
@@ -494,7 +500,7 @@ function renderDiscounts() {
           </div>
           <div class="field">
             <label>Valor</label>
-            <input type="number" min="0" step="1" data-dvalue value="${Number(p.discount_value) || 0}">
+            <input type="text" inputmode="numeric" data-dvalue value="${esc(p.discount_value || 0)}">
           </div>
           <div class="field">
             <label>Inicio</label>
@@ -526,7 +532,7 @@ function renderDiscounts() {
       const data = {
         price: Number(card.dataset.price) || 0,
         discount_type: card.querySelector('[data-dtype]').value,
-        discount_value: Number.parseInt(card.querySelector('[data-dvalue]').value, 10) || 0,
+        discount_value: copInt(card.querySelector('[data-dvalue]').value) || 0,
         discount_active: card.querySelector('[data-dactive]').checked,
         discount_start: card.querySelector('[data-dstart]').value,
         discount_end: card.querySelector('[data-dend]').value
@@ -551,7 +557,7 @@ function renderDiscounts() {
           method: 'PUT',
           body: {
             discount_type: card.querySelector('[data-dtype]').value,
-            discount_value: Number.parseInt(card.querySelector('[data-dvalue]').value, 10) || 0,
+            discount_value: copInt(card.querySelector('[data-dvalue]').value) || 0,
             discount_active: card.querySelector('[data-dactive]').checked,
             discount_start: card.querySelector('[data-dstart]').value,
             discount_end: card.querySelector('[data-dend]').value

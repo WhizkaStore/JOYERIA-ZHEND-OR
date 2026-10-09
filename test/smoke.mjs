@@ -279,6 +279,33 @@ async function run() {
   });
   check('Validación rechaza WhatsApp inválido', badWhatsapp.status === 400);
 
+  // 10c. Precios con separadores de miles escritos en español
+  const priced = await json('/api/admin/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({ name: 'Precio con puntos', price: '113.900', status: 'available', published: true })
+  });
+  check('El precio "113.900" se guarda como 113900',
+    priced.status === 201 && priced.body.product.price === 113900, JSON.stringify(priced.body));
+  const pricedId = priced.body?.raw?.id;
+  const pricedDiscount = await json('/api/admin/products/' + pricedId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({ discount_type: 'fixed', discount_value: '20.000', discount_active: true })
+  });
+  check('El descuento "20.000" se guarda como 20000',
+    pricedDiscount.status === 200 && pricedDiscount.body.product.discount_amount === 20000 &&
+    pricedDiscount.body.product.final_price === 93900, JSON.stringify(pricedDiscount.body?.product));
+  await json('/api/admin/products/' + pricedId, { method: 'DELETE', headers: auth });
+
+  const shipDot = await json('/api/admin/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({ brand_name: 'ZHEND’OR', shipping_cost: '35.000' })
+  });
+  check('El envío "35.000" se guarda como 35000',
+    shipDot.status === 200 && shipDot.body.settings.shipping_cost === '35000');
+
   // 11. Placeholder SVG
   const ph = await fetch(BASE + '/placeholder?name=Prueba');
   check('El placeholder devuelve SVG', ph.status === 200 && ph.headers.get('content-type')?.includes('svg'));

@@ -135,7 +135,8 @@
             <div class="field-row">
               <div class="field">
                 <label for="p-price">Precio normal (COP)</label>
-                <input type="number" id="p-price" min="1" step="1000" required placeholder="Ej. 150000">
+                <input type="text" inputmode="numeric" id="p-price" required placeholder="Ej. 113900" autocomplete="off">
+                <small class="hint">Escribe el precio exacto, puedes usar puntos: 113.900</small>
               </div>
               <div class="field">
                 <label for="p-weight">Peso / presentación</label>
@@ -156,7 +157,7 @@
                 </div>
                 <div class="field">
                   <label for="p-discount_value">Valor del descuento</label>
-                  <input type="number" id="p-discount_value" min="0" step="1" value="0">
+                  <input type="text" inputmode="numeric" id="p-discount_value" value="0" autocomplete="off">
                 </div>
               </div>
               <div class="field-row">
@@ -258,8 +259,8 @@
           </div>
           <div class="field">
             <label for="s-shipping_cost">Costo de envío (COP)</label>
-            <input type="number" id="s-shipping_cost" min="0" step="1000" placeholder="Vacío = por confirmar">
-            <small class="hint">Déjalo vacío si el envío se confirma por WhatsApp.</small>
+            <input type="text" inputmode="numeric" id="s-shipping_cost" placeholder="Vacío = por confirmar" autocomplete="off">
+            <small class="hint">Déjalo vacío si el envío se confirma por WhatsApp. Puedes usar puntos: 35.000</small>
           </div>
           <div class="field">
             <label for="s-contact_phone">Teléfono de contacto</label>

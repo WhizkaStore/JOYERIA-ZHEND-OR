@@ -320,6 +320,14 @@ function removeImage(imagePath) {
 const cleanStr = (value, max) =>
   typeof value === 'string' ? value.trim().slice(0, max) : '';
 
+// Convierte precios escritos en español (p. ej. "113.900") a enteros,
+// descartando separadores de miles y decimales que romperían parseInt.
+const copInt = (value) => {
+  const digits = String(value ?? '').replace(/[^\d]/g, '');
+  const n = digits === '' ? NaN : Number.parseInt(digits, 10);
+  return Number.isFinite(n) ? n : NaN;
+};
+
 function normalizeDate(value, errors, label) {
   const s = cleanStr(value, 20);
   if (s === '') return '';
@@ -343,9 +351,9 @@ function validateProductInput(data, { partial = false } = {}) {
     out.description = cleanStr(data.description, 2000);
   }
   if (!partial || data.price !== undefined) {
-    const price = Number.parseInt(data.price, 10);
+    const price = copInt(data.price);
     if (!Number.isFinite(price) || price < 1 || price > 999999999) {
-      errors.push('El precio debe ser un número entero positivo.');
+      errors.push('El precio debe ser un número entero positivo (ej. 113900 o 113.900).');
     }
     out.price = price;
   }
@@ -374,7 +382,7 @@ function validateProductInput(data, { partial = false } = {}) {
   }
   if (!partial || data.discount_value !== undefined) {
     const raw = data.discount_value;
-    const value = raw === undefined || raw === null || raw === '' ? 0 : Number.parseInt(raw, 10);
+    const value = raw === undefined || raw === null || raw === '' ? 0 : copInt(raw);
     if (!Number.isFinite(value) || value < 0) {
       errors.push('El valor del descuento debe ser un número positivo.');
     }
@@ -459,7 +467,7 @@ function validateSettingsInput(data) {
     if (shipRaw === '') {
       out.shipping_cost = '';
     } else {
-      const ship = Number.parseInt(shipRaw, 10);
+      const ship = copInt(shipRaw);
       if (!Number.isFinite(ship) || ship < 0 || ship > 10000000) {
         errors.push('El costo de envío no es válido (deja vacío para "por confirmar").');
       }
