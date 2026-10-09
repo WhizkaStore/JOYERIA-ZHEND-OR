@@ -438,6 +438,25 @@ async function run() {
     (await evaluate("document.querySelectorAll('.discount-card').length")) > 0);
   await screenshot('admin-desktop.png');
 
+  // Editor de imagen: elegir una foto abre el editor y "Aplicar" guarda el recorte
+  await send('DOM.enable');
+  const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const pngPath = path.join(SHOT_DIR, 'editor-sample.png');
+  fs.writeFileSync(pngPath, Buffer.from(PNG_1PX, 'base64'));
+  const doc = await send('DOM.getDocument', { depth: 2 });
+  const node = await send('DOM.querySelector', { nodeId: doc.root.nodeId, selector: '#p-image' });
+  await send('DOM.setFileInputFiles', { nodeId: node.nodeId, files: [pngPath] });
+  await evaluate("document.querySelector('#p-image').dispatchEvent(new Event('change', { bubbles: true }))");
+  const editorOpen = await waitFor("!!document.querySelector('.ie-overlay .ie-canvas')", 8000);
+  check('[Admin] El editor de imagen abre al elegir una foto', editorOpen);
+  await screenshot('image-editor.png');
+  await evaluate("document.querySelector('[data-ie=\"apply\"]').click()");
+  const applied = await waitFor(
+    "!document.querySelector('#p-image-preview').hidden && document.querySelector('#p-image-preview').src.startsWith('data:image/jpeg')",
+    8000
+  );
+  check('[Admin] El editor aplica la imagen recortada', applied);
+
   // Panel en móvil
   await setViewport(390, 844, true);
   await gotoWaiting(BASE + '/admin', "document.querySelector('#admin-tabs')", 12000);

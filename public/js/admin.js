@@ -358,7 +358,9 @@ function updateImagePreview(src) {
 
 async function handleProductImage(file) {
   try {
-    pendingImage = await readImageFile(file);
+    const edited = await ZhendorImageEditor.editImage(file);
+    if (!edited) return;
+    pendingImage = edited;
     updateImagePreview(pendingImage);
   } catch (error) {
     showToast(error.message, true);
