@@ -1748,7 +1748,7 @@ h1, h2, h3, h4 {
 .pm-variants {
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
+  gap: 1.4rem;
   padding-top: 1.2rem;
   border-top: 1px dashed rgba(184, 147, 61, 0.35);
   margin-top: 1rem;
@@ -1761,11 +1761,11 @@ h1, h2, h3, h4 {
 }
 
 .variant-group legend {
-  font-size: 0.64rem;
+  font-size: 0.68rem;
   letter-spacing: 0.26em;
   text-transform: uppercase;
   color: var(--brown-faint);
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.7rem;
   padding: 0;
 }
 
@@ -1956,7 +1956,22 @@ h1, h2, h3, h4 {
 .cart-item-variants {
   font-size: 0.74rem;
   color: var(--brown-soft);
-  margin-top: 0.2rem;
+  margin-top: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  align-items: flex-start;
+}
+
+.cart-variant-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.cart-variant-label {
+  font-weight: 600;
+  color: var(--brown);
 }
 
 .cart-item-price {

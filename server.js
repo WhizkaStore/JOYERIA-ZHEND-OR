@@ -173,6 +173,7 @@ function getCategories() {
 }
 
 function getVariants(productId) {
+  normalizeMixedVariantGroups(productId);
   const groups = stmts.variantGroups.all(productId);
   return groups.map((g) => ({
     id: g.id,
@@ -212,6 +213,7 @@ function slugify(value) {
 // Reemplaza todas las variantes de un producto de forma transaccional.
 function replaceVariants(productId, groupsInput) {
   const groups = Array.isArray(groupsInput) ? groupsInput : [];
+  variantCleanCache.delete(productId);
   db.exec('BEGIN');
   try {
     const existing = stmts.variantGroups.all(productId);
@@ -240,6 +242,119 @@ function replaceVariants(productId, groupsInput) {
     db.exec('ROLLBACK');
     throw error;
   }
+}
+
+/* -------------------------------------------------- */
+/* Separación de grupos mezclados (colores + tallas)  */
+/* -------------------------------------------------- */
+
+// Etiquetas que, en datos legados, pueden representar una talla numérica.
+const SIZE_LABEL_RE = /^\d+(?:[.,]\d+)?$/;
+const SIZE_NAME_RE = /talla|tama|medida|num|n[uú]mero/i;
+
+function labelLooksLikeSize(label) {
+  let t = String(label || '').trim().toLowerCase();
+  t = t.replace(/^(talla|tama|medida|n[uu]mero|num|nro|n°|no\.?|#)\s*/, '');
+  t = t.replace(/\s*(cm|mm|ml)$/, '');
+  t = t.replace(/\s+/g, '');
+  return SIZE_LABEL_RE.test(t);
+}
+
+// Colores conocidos de la tienda para rellenar el hex cuando los datos legados no lo traen.
+const LEGACY_COLOR_HEX = {
+  'oro viejo': '#b8933d',
+  champagne: '#e9ddba',
+  negro: '#2a2a2a',
+  dorado: '#d8be69',
+  plata: '#c0c0c0',
+  blanco: '#f5f3ee',
+  marfil: '#fffff0',
+  beige: '#dcd3bf',
+  camel: '#c19a6b',
+  marron: '#6f4e37',
+  chocolate: '#4a3127',
+  burdeos: '#7a2e2e',
+  rojo: '#a63432',
+  coral: '#e86850',
+  terracota: '#cb7a5a',
+  rosado: '#d98ba8',
+  'rosa palo': '#e8c4c4',
+  'rosa cuarzo': '#f7b3c4',
+  fucsia: '#c71585',
+  naranja: '#d9822b',
+  amarillo: '#e8b23a',
+  oliva: '#8a9a6b',
+  'verde esmeralda': '#2f7d63',
+  'verde bosque': '#3d5c4a',
+  turquesa: '#3fa9a0',
+  celeste: '#a8cfdd',
+  'azul acero': '#5b7c99',
+  'azul marino': '#2e4a6e',
+  lavanda: '#c6b9db',
+  morado: '#7b5e9b',
+  violeta: '#5a3d6e',
+  'gris perla': '#b9b4aa'
+};
+
+function buildColorHexMap() {
+  const map = new Map();
+  try {
+    for (const c of parsePalette()) map.set(String(c.label).trim().toLowerCase(), c.hex);
+  } catch {}
+  for (const [label, hex] of Object.entries(LEGACY_COLOR_HEX)) {
+    if (!map.has(label)) map.set(label, hex);
+  }
+  return map;
+}
+
+const variantCleanCache = new Set();
+
+// Divide los grupos que mezclan colores y tallas en dos grupos reales y
+// rellena el hex de los colores conocidos. Idempotente y perezoso.
+function normalizeMixedVariantGroups(productId) {
+  if (!Number.isFinite(productId) || variantCleanCache.has(productId)) return;
+  const groups = stmts.variantGroups.all(productId);
+  let paletteMap = null;
+  let changed = false;
+  const rebuilt = [];
+
+  for (const g of groups) {
+    const opts = stmts.variantOptions.all(g.id);
+    const colored = [];
+    const sized = [];
+    for (const o of opts) {
+      if (!o.color && labelLooksLikeSize(o.label)) sized.push(o);
+      else colored.push(o);
+    }
+    if (sized.length && colored.length) {
+      changed = true;
+      if (!paletteMap) paletteMap = buildColorHexMap();
+      const keepName = SIZE_NAME_RE.test(g.name) ? g.name : 'Talla';
+      rebuilt.push({
+        name: 'Color',
+        required: g.required === 1,
+        options: colored.map((o) => ({
+          label: o.label,
+          color: o.color || paletteMap.get(String(o.label).trim().toLowerCase()) || '',
+          available: o.available === 1
+        }))
+      });
+      rebuilt.push({
+        name: keepName,
+        required: g.required === 1,
+        options: sized.map((o) => ({ label: o.label, color: '', available: o.available === 1 }))
+      });
+    } else {
+      rebuilt.push({
+        name: g.name,
+        required: g.required === 1,
+        options: opts.map((o) => ({ label: o.label, color: o.color || '', available: o.available === 1 }))
+      });
+    }
+  }
+
+  if (changed) replaceVariants(productId, rebuilt);
+  variantCleanCache.add(productId);
 }
 
 // Valida las selecciones de variantes contra un producto y devuelve las
@@ -979,6 +1094,7 @@ route('DELETE', '/api/admin/products/:id', (req, res, params) => {
   for (const g of groups) stmts.deleteVariantOptionsForGroup.run(g.id);
   stmts.deleteVariantGroups.run(id);
   stmts.deleteProduct.run(id);
+  variantCleanCache.delete(id);
   sendJson(res, 200, { ok: true });
 });
 
@@ -1321,6 +1437,7 @@ route('POST', '/api/admin/restore', async (req, res) => {
     console.error('[Restaurar]', error);
     return sendJson(res, 500, { error: 'No se pudo restaurar el respaldo. Intenta de nuevo.' });
   }
+  variantCleanCache.clear();
   sendJson(res, 200, { ok: true });
 });
 

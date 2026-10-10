@@ -498,7 +498,7 @@ async function run() {
   })`));
   check('[Variantes] Faltando la opción obligatoria se bloquea la compra',
     reqErr.addDisabled && reqErr.buyDisabled &&
-      reqErr.availability.toLowerCase().includes('color de hilo') && !reqErr.checkoutOpen,
+      reqErr.availability.toLowerCase().includes('color') && !reqErr.checkoutOpen,
     JSON.stringify(reqErr));
 
   // Elegir variante y añadir al carrito
@@ -589,7 +589,7 @@ async function run() {
   check('[Checkout] El mensaje repite la pieza dos veces (dos líneas)',
     (orderText.match(/Brazalete Vitrina Test/g) || []).length === 2);
   check('[Checkout] El mensaje incluye las variantes de cada línea',
-    orderText.includes('Color de hilo: Oro') && orderText.includes('Color de hilo: Verde'));
+    orderText.includes('Color: Oro') && orderText.includes('Color: Verde'));
   check('[Checkout] El mensaje incluye el total', orderText.includes('Total'));
   await waitFor('document.querySelector("#checkout-modal").hidden', 8000);
   check('[Checkout] El modal se cierra tras abrir WhatsApp',
@@ -597,6 +597,220 @@ async function run() {
 
   // Limpieza: eliminar el producto de prueba
   await fetch(`${BASE}/api/admin/products/${vpId}`, { method: 'DELETE', headers: apiAuth });
+
+  /* --- Grupo mezclado legado: colores + tallas se dividen en secciones --- */
+
+  // Producto con UN solo grupo que mezcla colores y tallas (como los datos legados en producción)
+  const mix = await (await fetch(`${BASE}/api/admin/products`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...apiAuth },
+    body: JSON.stringify({
+      name: 'Anillo Mezclado Test',
+      price: 120000,
+      status: 'available',
+      published: true,
+      category: 'anillos',
+      variants: [{
+        name: 'Talla del anillo', required: true,
+        options: [
+          { label: 'Oro viejo', color: '', available: true },
+          { label: 'Champagne', color: '', available: false },
+          { label: 'BRANDI', color: '', available: true },
+          { label: 'Negro', color: '', available: true },
+          { label: '6', color: '', available: true },
+          { label: '7', color: '', available: false },
+          { label: '8', color: '', available: true },
+          { label: '9', color: '', available: true }
+        ]
+      }]
+    })
+  })).json();
+  const mixId = mix.product.id;
+  const mixGroups = mix.product.variants || [];
+  const cOro = mixGroups[0]?.options?.[0]?.id;
+  const cChamp = mixGroups[0]?.options?.[1]?.id;
+  const cBrandi = mixGroups[0]?.options?.[2]?.id;
+  const cNegro = mixGroups[0]?.options?.[3]?.id;
+  const s6 = mixGroups[1]?.options?.[0]?.id;
+  const s7 = mixGroups[1]?.options?.[1]?.id;
+  const s8 = mixGroups[1]?.options?.[2]?.id;
+  const s9 = mixGroups[1]?.options?.[3]?.id;
+  check('[Mezclado] El grupo mixto se divide en Colores (primero) y Tallas',
+    mixGroups.length === 2 && mixGroups[0].name === 'Color' &&
+      mixGroups[0].options[0].color === '#b8933d' &&
+      mixGroups[0].options[1].available === false &&
+      mixGroups[1].name === 'Talla del anillo' &&
+      mixGroups[1].options[1].available === false,
+    JSON.stringify(mixGroups.map((g) => ({ name: g.name, opts: g.options.map((o) => o.label + (o.color ? '#' + o.color : '') + (o.available ? '' : '!')) }))));
+  check('[Mezclado] Las tallas quedan solo con valores numéricos',
+    mixGroups[1].options.map((o) => o.label).join(',') === '6,7,8,9');
+
+  // Solo-talla: un grupo numérico limpio no cambia, en la tienda se titula «Tallas»
+  const tallaOnly = await (await fetch(`${BASE}/api/admin/products`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...apiAuth },
+    body: JSON.stringify({
+      name: 'Anillo Solo Talla Test',
+      price: 80000, status: 'available', published: true, category: 'anillos',
+      variants: [{ name: 'Talla del anillo', required: true, options: [
+        { label: '15', color: '', available: true },
+        { label: '16', color: '', available: true }
+      ] }]
+    })
+  })).json();
+  const tallaOnlyId = tallaOnly.product.id;
+
+  // Tienda en escritorio con el carrito limpio
+  await setViewport(1440, 900, false);
+  await evaluate("localStorage.setItem('zhendor_cart_v1', '[]')");
+  await goto(BASE);
+  const openMixModal = async () => {
+    await evaluate("document.querySelector('.collection-menu-row[data-slug=\"anillos\"]').click()");
+    await waitFor(`document.querySelectorAll('#product-grid [data-view]').length > 0`, 6000);
+    await evaluate(`document.querySelector('.card [data-view="${mixId}"]').click()`);
+    await waitFor('!document.querySelector("#product-modal").hidden', 5000);
+    await sleep(150);
+  };
+  await openMixModal();
+
+  // Dos secciones «Colores» y «Tallas» con títulos y sin mezcla
+  const mixedModal = JSON.parse(await evaluate(`JSON.stringify({
+    groups: document.querySelectorAll('#pm-variants .variant-group').length,
+    legends: [...document.querySelectorAll('#pm-variants .variant-group legend')].map((l) => l.textContent.replace('*', '').trim()),
+    kinds: [...document.querySelectorAll('#pm-variants .variant-group')].map((g) => g.dataset.kind)
+  })`));
+  check('[Mezclado] El modal muestra «Colores» y «Tallas» como secciones separadas',
+    mixedModal.groups === 2 && mixedModal.legends.join('|') === 'Colores|Tallas' &&
+      mixedModal.kinds.join('|') === 'colors|tallas',
+    JSON.stringify(mixedModal));
+
+  // Agotados bloqueados e independencia de selección por grupo
+  const selectState = JSON.parse(await evaluate(`JSON.stringify({
+    champDisabled: document.querySelector('.variant-option[data-oid="${cChamp}"]')?.classList.contains('disabled') ?? false,
+    s7Disabled: document.querySelector('.variant-option[data-oid="${s7}"]')?.classList.contains('disabled') ?? false,
+    arDisabled: document.querySelector('.variant-option[data-oid="${s7}"]')?.getAttribute('aria-disabled'),
+    addDisabled: document.querySelector('#pm-add').disabled,
+    avail: document.querySelector('#pm-availability').textContent.trim()
+  })`));
+  check('[Mezclado] Opciones agotadas no seleccionables y falta selección',
+    selectState.champDisabled && selectState.s7Disabled && selectState.arDisabled === 'true' &&
+      selectState.addDisabled && selectState.avail.toLowerCase().includes('color'),
+    JSON.stringify(selectState));
+
+  // Seleccionar solo el color no basta: falta la talla
+  await evaluate(`document.querySelector('.variant-option[data-oid="${cOro}"]').click()`);
+  await sleep(120);
+  const colorOnly = JSON.parse(await evaluate(`JSON.stringify({
+    addDisabled: document.querySelector('#pm-add').disabled,
+    avail: document.querySelector('#pm-availability').textContent.trim(),
+    oroSelected: document.querySelector('.variant-option[data-oid="${cOro}"]').classList.contains('selected')
+  })`));
+  check('[Mezclado] Elegir el color no habilita hasta escoger la talla',
+    colorOnly.oroSelected && colorOnly.addDisabled && colorOnly.avail.includes('talla'),
+    JSON.stringify(colorOnly));
+
+  // Elegir la talla habilita; luego cambiar el color conserva la talla
+  await evaluate(`document.querySelector('.variant-option[data-oid="${s8}"]').click()`);
+  await sleep(120);
+  const withBoth = JSON.parse(await evaluate(`JSON.stringify({
+    addDisabled: document.querySelector('#pm-add').disabled,
+    s8Selected: document.querySelector('.variant-option[data-oid="${s8}"]').classList.contains('selected')
+  })`));
+  check('[Mezclado] Color + Talla habilitan la compra',
+    !withBoth.addDisabled && withBoth.s8Selected, JSON.stringify(withBoth));
+
+  await evaluate(`document.querySelector('.variant-option[data-oid="${cNegro}"]').click()`);
+  await sleep(120);
+  const independence = JSON.parse(await evaluate(`JSON.stringify({
+    negroSelected: document.querySelector('.variant-option[data-oid="${cNegro}"]').classList.contains('selected'),
+    oroSelected: document.querySelector('.variant-option[data-oid="${cOro}"]').classList.contains('selected'),
+    s8Selected: document.querySelector('.variant-option[data-oid="${s8}"]').classList.contains('selected')
+  })`));
+  check('[Mezclado] Cambiar el color conserva la talla elegida',
+    independence.negroSelected && !independence.oroSelected && independence.s8Selected,
+    JSON.stringify(independence));
+
+  // Añadir primera línea (Negro + 8) y segunda línea (BRANDI + 9)
+  await evaluate("document.querySelector('#pm-add').click()");
+  await sleep(300);
+  await openMixModal();
+  await evaluate(`document.querySelector('.variant-option[data-oid="${cBrandi}"]').click()`);
+  await sleep(120);
+  await evaluate(`document.querySelector('.variant-option[data-oid="${s9}"]').click()`);
+  await sleep(120);
+  await evaluate("document.querySelector('#pm-add').click()");
+  await sleep(300);
+  const mixCartBadge = await evaluate("document.querySelector('#cart-badge').textContent");
+  check('[Mezclado] Cada combinación Color+Talla es una línea distinta', mixCartBadge === '2', `badge=${mixCartBadge}`);
+
+  // El carrito muestra ambas opciones en líneas separadas
+  await evaluate("document.querySelector('#cart-open').click()");
+  await waitFor('!document.querySelector("#cart-drawer").hidden', 5000);
+  await sleep(200);
+  const mixCart = await evaluate(`[...document.querySelectorAll('#cart-items .cart-item')].map((el) => el.textContent.replace(/\\s+/g, ' ').trim()).join(' || ')`);
+  check('[Mezclado] El carrito separa Color y Talla por línea',
+    mixCart.includes('Color: Negro') && mixCart.includes('Talla: 8') &&
+      mixCart.includes('Color: BRANDI') && mixCart.includes('Talla: 9'),
+    mixCart);
+
+  // WhatsApp con ambas opciones en líneas separadas
+  await evaluate("document.querySelector('#cart-checkout').click()");
+  await waitFor('!document.querySelector("#checkout-modal").hidden', 6000);
+  await sleep(200);
+  await evaluate(`(() => {
+    document.querySelector('#co-name').value = 'Laura M';
+    document.querySelector('#co-phone').value = '3114455667';
+    document.querySelector('#co-city').value = 'Bogotá';
+    document.querySelector('#co-address').value = 'Cra 15 # 45-67';
+    window.__waMix = null;
+    window.open = (url) => { window.__waMix = url; return null; };
+    document.querySelector('#co-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  })()`);
+  await waitFor('window.__waMix !== null', 8000);
+  const waMixText = decodeURIComponent((await evaluate('window.__waMix')).split('text=')[1]);
+  check('[Mezclado] El pedido de WhatsApp incluye Color y Talla por separado',
+    waMixText.includes('Color: Negro') && waMixText.includes('Talla: 8') &&
+      waMixText.includes('Color: BRANDI') && waMixText.includes('Talla: 9'),
+    waMixText);
+
+  // Móvil: las dos secciones se ven sin desbordes y el flujo sigue siendo independiente
+  await setViewport(320, 568, true);
+  await goto(BASE);
+  await evaluate("document.querySelector('.collection-menu-row[data-slug=\"anillos\"]').click()");
+  await waitFor(`document.querySelectorAll('#product-grid [data-view]').length > 0`, 6000);
+  await evaluate(`document.querySelector('.card [data-view="${mixId}"]').click()`);
+  await waitFor('!document.querySelector("#product-modal").hidden', 5000);
+  await sleep(150);
+  const mixMobile = JSON.parse(await evaluate(`JSON.stringify({
+    sw: document.documentElement.scrollWidth,
+    iw: window.innerWidth,
+    groups: document.querySelectorAll('#pm-variants .variant-group').length,
+    legends: [...document.querySelectorAll('#pm-variants .variant-group legend')].map((l) => l.textContent.replace('*', '').trim())
+  })`));
+  check('[Mezclado Móvil] Colores y Tallas visibles sin desbordamiento',
+    mixMobile.sw <= mixMobile.iw + 1 && mixMobile.groups === 2 &&
+      mixMobile.legends.join('|') === 'Colores|Tallas',
+    JSON.stringify(mixMobile));
+
+  // Solo-talla: una sola sección titulada «Tallas»
+  await evaluate("document.querySelector('#product-modal [data-close]').click()");
+  await sleep(200);
+  await evaluate(`document.querySelector('.card [data-view="${tallaOnlyId}"]').click()`);
+  await waitFor('!document.querySelector("#product-modal").hidden', 5000);
+  await sleep(120);
+  const tallaOnlyModal = JSON.parse(await evaluate(`JSON.stringify({
+    groups: document.querySelectorAll('#pm-variants .variant-group').length,
+    legend: document.querySelector('#pm-variants .variant-group legend')?.textContent.replace('*', '').trim() || '',
+    kind: document.querySelector('#pm-variants .variant-group')?.dataset.kind || ''
+  })`));
+  check('[Solo Talla] Un grupo numérico se titula «Tallas» y bloquea sin elegir',
+    tallaOnlyModal.groups === 1 && tallaOnlyModal.legend === 'Tallas' &&
+      tallaOnlyModal.kind === 'tallas' && (await evaluate("document.querySelector('#pm-add').disabled")),
+    JSON.stringify(tallaOnlyModal));
+
+  // Cerrar el modal y limpiar los productos de prueba
+  await evaluate("document.querySelector('#product-modal [data-close]').click()");
+  await sleep(150);
+  await fetch(`${BASE}/api/admin/products/${mixId}`, { method: 'DELETE', headers: apiAuth });
+  await fetch(`${BASE}/api/admin/products/${tallaOnlyId}`, { method: 'DELETE', headers: apiAuth });
 
   /* --- Colección: menú y vista en móvil y tableta --- */
   const colSizes = [

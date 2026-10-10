@@ -367,6 +367,34 @@ function setAvailability(text, isError) {
   el.innerHTML = isError ? esc(text) : `<span class="dot ${isError ? 'out' : ''}"></span>${esc(text)}`;
 }
 
+const SIZE_NAME_RE = /talla|tama|medida|num|n[uú]mero/i;
+const COLOR_NAME_RE = /color|hilo|tono|tapiz|material|cinta/i;
+const SIZE_LABEL_RE = /^\d+(?:[.,]\d+)?$/;
+
+function labelLooksLikeSize(label) {
+  let t = String(label || '').trim().toLowerCase();
+  t = t.replace(/^(talla|tama|medida|n[uu]mero|num|nro|n°|no\.?|#)\s*/, '');
+  t = t.replace(/\s*(cm|mm|ml)$/, '');
+  t = t.replace(/\s+/g, '');
+  return SIZE_LABEL_RE.test(t);
+}
+
+function variantGroupKind(group) {
+  const name = String(group.name || '');
+  const opts = group.options || [];
+  if (SIZE_NAME_RE.test(name)) return 'tallas';
+  if (COLOR_NAME_RE.test(name) || opts.some((o) => o.color)) return 'colors';
+  if (opts.some((o) => labelLooksLikeSize(o.label))) return 'tallas';
+  return 'opciones';
+}
+
+function variantGroupTitle(group) {
+  const kind = variantGroupKind(group);
+  if (kind === 'colors') return 'Colores';
+  if (kind === 'tallas') return 'Tallas';
+  return group.name;
+}
+
 function renderVariants() {
   const product = state.currentProduct;
   const wrap = $('#pm-variants');
@@ -395,8 +423,8 @@ function renderVariants() {
         </button>`;
       });
       return `
-      <fieldset class="variant-group">
-        <legend>${esc(group.name)}${group.required ? ' <abbr class="variant-required" title="Obligatorio">*</abbr>' : ''}</legend>
+      <fieldset class="variant-group" data-kind="${variantGroupKind(group)}">
+        <legend>${esc(variantGroupTitle(group))}${group.required ? ' <abbr class="variant-required" title="Obligatorio">*</abbr>' : ''}</legend>
         <div class="variant-options">${options.join('')}</div>
       </fieldset>`;
     })
@@ -428,7 +456,10 @@ function selectionErrors(product) {
   const groups = product && Array.isArray(product.variants) ? product.variants : [];
   for (const group of groups) {
     if (group.required && group.options && group.options.length && !state.selections[group.id]) {
-      errors.push(`Selecciona ${group.name.toLowerCase()}.`);
+      const kind = variantGroupKind(group);
+      if (kind === 'colors') errors.push('Selecciona un color.');
+      else if (kind === 'tallas') errors.push('Selecciona una talla.');
+      else errors.push(`Selecciona ${group.name.toLowerCase()}.`);
     }
   }
   return errors;
@@ -619,9 +650,9 @@ function renderCart() {
         ? line.selections
             .map(
               (s) =>
-                `${s.color ? `<span class="line-swatch" style="--vc:${esc(s.color)}"></span>` : ''}${esc(s.group_name)}: ${esc(s.option_label)}`
+                `<span class="cart-variant-line">${s.color ? `<span class="line-swatch" style="--vc:${esc(s.color)}"></span>` : ''}<span class="cart-variant-label">${esc(ZM.shortGroupName(s.group_name))}:</span> ${esc(s.option_label)}</span>`
             )
-            .join(' · ')
+            .join('')
         : '';
       return `
       <article class="cart-item">

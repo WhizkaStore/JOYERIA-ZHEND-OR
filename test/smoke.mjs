@@ -524,7 +524,7 @@ async function run() {
   );
   check('buildOrderMessage incluye ambos productos',
     orderMsg.includes('Brazalete Hoja Dorada') && orderMsg.includes('Anillo Aura Dorado'));
-  check('buildOrderMessage incluye las variantes elegidas', orderMsg.includes('Color de hilo: Oro'));
+  check('buildOrderMessage incluye las variantes elegidas', orderMsg.includes('Color: Oro'));
   check('buildOrderMessage incluye la categoría', orderMsg.includes('(Brazaletes)'));
   check('buildOrderMessage refleja el total del pedido', orderMsg.includes('• Total: ' + ZM.money(1645000)));
   check('buildOrderMessage incluye los datos del cliente', orderMsg.includes('• Nombre: Ana Gómez'));
@@ -743,6 +743,50 @@ async function run() {
       catsAfterRestore.body.categories.length >= 6);
 
   await json('/api/admin/products/' + varId, { method: 'DELETE', headers: auth });
+
+  // 19b. Separación de grupos mezclados (colores + tallas legados)
+  const mix = await json('/api/admin/products', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({
+      name: 'Anillo legado mixto', price: 95000, status: 'available',
+      published: true, category: 'anillos',
+      variants: [{ name: 'Talla del anillo', required: true, options: [
+        { label: 'Oro viejo', color: '', available: true },
+        { label: 'Champagne', color: '', available: false },
+        { label: 'BRANDI', color: '', available: true },
+        { label: 'Negro', color: '', available: true },
+        { label: '6', color: '', available: true },
+        { label: '7', color: '', available: true }
+      ] }]
+    })
+  });
+  check('POST producto con grupo mezclado responde 201', mix.status === 201);
+  const mixId = mix.body.product.id;
+  const mixVariants = mix.body.product.variants;
+  check('El grupo mezclado se divide en Colores y Tallas',
+    mixVariants.length === 2 &&
+      mixVariants[0].name === 'Color' && mixVariants[1].name === 'Talla del anillo' &&
+      mixVariants[0].options.some((o) => o.label === 'Oro viejo' && o.color === '#b8933d') &&
+      mixVariants[0].options.some((o) => o.label === 'Champagne' && o.available === false) &&
+      mixVariants[1].options.every((o) => ['6', '7'].includes(o.label)),
+    JSON.stringify(mixVariants));
+  const mixPub = await json('/api/products/' + mixId);
+  check('El producto mixto público mantiene la separación',
+    mixPub.status === 200 && mixPub.body.product.variants.length === 2 &&
+      mixPub.body.product.variants[0].name === 'Color');
+  const mixQuote = await json('/api/order/quote', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: [{
+      product_id: mixId, quantity: 2,
+      variant_selections: [
+        { group_id: mixVariants[0].id, option_id: mixVariants[0].options[0].id },
+        { group_id: mixVariants[1].id, option_id: mixVariants[1].options[0].id }
+      ]
+    }] })
+  });
+  check('Se cotiza un anillo con Color y Talla juntos',
+    mixQuote.status === 200 && mixQuote.body.quote.items[0].variants.length === 2);
+  await json('/api/admin/products/' + mixId, { method: 'DELETE', headers: auth });
 
   // 20. Cierre de sesión
   const logout = await json('/api/admin/logout', { method: 'POST', headers: auth });

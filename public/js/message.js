@@ -97,10 +97,9 @@
         `   Precio unitario: ${money(unit)}`
       );
       if (it.selections && it.selections.length) {
-        lines.push(
-          '   ' +
-            it.selections.map((sel) => `${sel.group_name}: ${sel.option_label}`).join(' · ')
-        );
+        for (const sel of it.selections) {
+          lines.push(`   ${shortGroupName(sel.group_name)}: ${sel.option_label}`);
+        }
       }
       if (lineDiscount > 0) lines.push(`   Descuento: -${money(lineDiscount)}`);
       lines.push(`   Subtotal: ${money(lineSubtotal)}`);
@@ -143,6 +142,16 @@
     return lines;
   }
 
+  function shortGroupName(name) {
+    const n = String(name || '');
+    if (SIZE_NAME_RE.test(n)) return 'Talla';
+    if (COLOR_NAME_RE.test(n)) return 'Color';
+    return n;
+  }
+
+  const SIZE_NAME_RE = /talla|tama|medida|n[uú]mero/i;
+  const COLOR_NAME_RE = /color|hilo|tono|tapiz|material|cinta/i;
+
   function normalizePhone(phone) {
     return String(phone || '').replace(/[^\d]/g, '');
   }
@@ -152,5 +161,5 @@
     return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
   }
 
-  return { money, parseShipping, buildMessage, buildOrderMessage, whatsappUrl, normalizePhone };
+  return { money, parseShipping, buildMessage, buildOrderMessage, whatsappUrl, normalizePhone, shortGroupName };
 });
