@@ -1628,82 +1628,97 @@ h1, h2, h3, h4 {
   }
 }
 
-/* ------------------------------ Categorías ------------------------------ */
+/* ------------------------------ Colección: menú de líneas ------------------------------ */
 
-.nav-categories {
-  display: contents;
+.collection-menu-list {
+  max-width: 720px;
+  margin: 0 auto;
+  background: linear-gradient(180deg, #d8b878 0%, #c49a5f 100%);
+  border: 1px solid rgba(255, 252, 245, 0.4);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
 }
 
-.category-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0.85rem;
-  margin-bottom: 2rem;
-}
-
-.category-card {
+.collection-menu-row {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 1.1rem 1rem;
-  text-align: left;
-  background: rgba(255, 252, 245, 0.6);
-  border: 1px solid rgba(216, 190, 105, 0.35);
-  border-radius: 4px;
-  color: var(--brown);
-  font-family: var(--serif);
-  transition: all 0.3s var(--ease);
-  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.35rem 1.7rem;
+  color: var(--white);
+  border-bottom: 1px solid rgba(255, 252, 245, 0.35);
+  transition: background 0.3s var(--ease);
 }
 
-.category-card:hover {
-  border-color: var(--gold-deep);
-  background: rgba(216, 190, 105, 0.12);
-  transform: translateY(-2px);
+.collection-menu-row:last-child {
+  border-bottom: none;
 }
 
-.category-name {
+.collection-menu-row:hover,
+.collection-menu-row:focus-visible {
+  background: rgba(255, 252, 245, 0.1);
+}
+
+.cmr-name {
+  font-family: var(--sans);
   font-size: 1.05rem;
-}
-
-.category-count {
-  font-family: var(--sans);
-  font-size: 0.68rem;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.32em;
   text-transform: uppercase;
-  color: var(--brown-faint);
 }
 
-.category-chips {
+.cmr-count {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 252, 245, 0.72);
+}
+
+.cmr-arrow {
+  width: 26px;
+  height: 26px;
+  flex: none;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 252, 245, 0.92);
+  transition: transform 0.3s var(--ease);
 }
 
-.chip {
-  font-family: var(--sans);
+.collection-menu-row:hover .cmr-arrow {
+  transform: translateX(4px);
+}
+
+/* ------------------------------ Colección: vista de una línea ------------------------------ */
+
+.collection-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 0.72rem;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  padding: 0.6rem 1.15rem;
-  border-radius: 999px;
-  border: 1px solid rgba(216, 190, 105, 0.4);
-  background: rgba(255, 252, 245, 0.6);
-  color: var(--brown-soft);
-  cursor: pointer;
-  transition: all 0.3s var(--ease);
-}
-
-.chip:hover {
-  border-color: var(--gold-deep);
   color: var(--gold-deep);
+  transition: color 0.3s var(--ease);
 }
 
-.chip.active {
-  background: linear-gradient(120deg, var(--gold), var(--gold-deep));
-  color: #fffcf5;
-  border-color: transparent;
+.collection-back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.collection-back:hover {
+  color: var(--brown);
+}
+
+.collection-view .collection-view-head {
+  margin-bottom: 3rem;
+}
+
+.collection-view .product-grid {
+  margin-bottom: 1rem;
 }
 
 .card-category {
@@ -2117,28 +2132,27 @@ h1, h2, h3, h4 {
   white-space: nowrap;
 }
 
+.line-swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--vc, #d8be69);
+  border: 1px solid rgba(81, 70, 56, 0.3);
+  vertical-align: -0.08rem;
+  margin-right: 0.3rem;
+}
+
 /* ------------------------------ Responsive nuevo ------------------------------ */
 
-@media (max-width: 1020px) {
-  .category-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 880px) {
-  .nav-categories {
-    display: block;
-  }
-
-  .nav-categories .nav-link {
-    margin: 0;
-    padding: 0.9rem 0;
-  }
-}
-
 @media (max-width: 640px) {
-  .category-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .collection-menu-row {
+    padding: 1.15rem 1.15rem;
+  }
+
+  .cmr-name {
+    font-size: 0.98rem;
+    letter-spacing: 0.24em;
   }
 
   .pm-buttons {

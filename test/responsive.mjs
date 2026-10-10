@@ -152,7 +152,9 @@ async function gotoWaiting(url, readyExpr, timeout = 10000) {
 }
 
 async function openCheckout() {
-  await evaluate("document.querySelector('[data-view]').click()");
+  await evaluate("document.querySelector('#collection-menu .collection-menu-row').click()");
+  await waitFor("document.querySelectorAll('#product-grid [data-view]').length > 0", 6000);
+  await evaluate("document.querySelector('#product-grid [data-view]').click()");
   await waitFor("!document.querySelector('#product-modal').hidden", 5000);
   await sleep(200);
   await evaluate("document.querySelector('#pm-buy').click()");
@@ -435,20 +437,47 @@ async function run() {
   await setViewport(1440, 900, false);
   await goto(BASE);
 
-  const chipCount = await evaluate("document.querySelectorAll('.chip').length");
-  check('[Categorías] Los chips se muestran (Todas + 6 categorías)', chipCount >= 7, `chips=${chipCount}`);
+  // Menú de líneas: 6 filas en el orden esperado, con la vista de productos oculta
+  const menu = JSON.parse(await evaluate(`JSON.stringify({
+    hidden: document.querySelector('#collection-menu').hidden,
+    viewHidden: document.querySelector('#collection-view').hidden,
+    rows: [...document.querySelectorAll('.collection-menu-row')].map((r) => r.dataset.slug),
+    nameCount: document.querySelectorAll('.collection-menu-row .cmr-name').length
+  })`));
+  check('[Colección] El menú muestra las 6 líneas en orden',
+    !menu.hidden && menu.viewHidden && menu.nameCount === 6 &&
+      menu.rows.join(',') === 'anillos,aretes,brazaletes,encanto-artesanal,cadenas,dijes',
+    JSON.stringify(menu));
 
-  await evaluate("document.querySelector('.chip[data-slug=\"brazaletes\"]').click()");
-  await sleep(300);
-  const catFilter = JSON.parse(await evaluate(`JSON.stringify({
+  // Clic en una fila abre la vista de la categoría con solo esas piezas
+  await evaluate("document.querySelector('.collection-menu-row[data-slug=\"brazaletes\"]').click()");
+  await sleep(400);
+  const catView = JSON.parse(await evaluate(`JSON.stringify({
+    viewHidden: document.querySelector('#collection-view').hidden,
+    menuHidden: document.querySelector('#collection-menu').hidden,
+    title: document.querySelector('#collection-view-title').textContent.trim(),
     count: document.querySelectorAll('#product-grid .card').length,
     cats: [...document.querySelectorAll('#product-grid .card-category')].map((e) => e.textContent.trim())
   })`));
-  check('[Categorías] El chip filtra solo piezas de esa categoría',
-    catFilter.count > 0 && catFilter.cats.every((c) => c === 'Brazaletes'),
-    `count=${catFilter.count}`);
-  await evaluate("document.querySelector('.chip[data-slug=\"todas\"]').click()");
-  await sleep(300);
+  check('[Colección] La fila abre la vista filtrada de la categoría',
+    !catView.viewHidden && catView.menuHidden && catView.title === 'Brazaletes' &&
+      catView.count > 0 && catView.cats.every((c) => c === 'Brazaletes'),
+    JSON.stringify(catView));
+
+  // Volver al menú de líneas
+  await evaluate("document.querySelector('#collection-back').click()");
+  await sleep(400);
+  const back = JSON.parse(await evaluate(`JSON.stringify({
+    menuHidden: document.querySelector('#collection-menu').hidden,
+    viewHidden: document.querySelector('#collection-view').hidden,
+    rows: document.querySelectorAll('.collection-menu-row').length
+  })`));
+  check('[Colección] El botón volver regresa al menú de líneas',
+    !back.menuHidden && back.viewHidden && back.rows === 6, JSON.stringify(back));
+
+  // Abrir de nuevo la categoría para seguir con el modal de producto
+  await evaluate("document.querySelector('.collection-menu-row[data-slug=\"brazaletes\"]').click()");
+  await sleep(400);
 
   // Modal de producto con variantes
   await evaluate(`document.querySelector('.card [data-view="${vpId}"]').click()`);
@@ -486,6 +515,8 @@ async function run() {
   // Carrito de prueba limpio para validar el contador y las líneas
   await evaluate("localStorage.setItem('zhendor_cart_v1', '[]')");
   await goto(BASE);
+  await evaluate("document.querySelector('.collection-menu-row[data-slug=\"brazaletes\"]').click()");
+  await waitFor("document.querySelectorAll('#product-grid [data-view]').length > 0", 6000);
   await evaluate(`document.querySelector('.card [data-view="${vpId}"]').click()`);
   await waitFor('!document.querySelector("#product-modal").hidden', 5000);
   await evaluate(`document.querySelector('.variant-option[data-oid="${optOro}"]').click()`);
@@ -521,6 +552,8 @@ async function run() {
   })`));
   check('[Carrito] El panel muestra las dos líneas', drawer.items === 2, `items=${drawer.items}`);
   check('[Carrito] El subtotal del panel es visible', !drawer.subtotalHidden && drawer.subtotal.length > 0);
+  check('[Carrito] Las líneas muestran el chip de color de su variante',
+    await evaluate("document.querySelectorAll('#cart-items .cart-item-variants .line-swatch').length") === 2);
 
   // Resumen y envío a WhatsApp
   await evaluate("document.querySelector('#cart-checkout').click()");
@@ -565,6 +598,45 @@ async function run() {
   // Limpieza: eliminar el producto de prueba
   await fetch(`${BASE}/api/admin/products/${vpId}`, { method: 'DELETE', headers: apiAuth });
 
+  /* --- Colección: menú y vista en móvil y tableta --- */
+  const colSizes = [
+    ['Móvil 320x568', 320, 568, true],
+    ['Tableta 768x1024', 768, 1024, true]
+  ];
+  for (const [label, w, h, mobile] of colSizes) {
+    await setViewport(w, h, mobile);
+    await goto(BASE);
+    const col = JSON.parse(await evaluate(`JSON.stringify({
+      sw: document.documentElement.scrollWidth,
+      iw: window.innerWidth,
+      rows: document.querySelectorAll('.collection-menu-row').length,
+      menuHidden: document.querySelector('#collection-menu').hidden,
+      viewHidden: document.querySelector('#collection-view').hidden
+    })`));
+    check(`[${label}] El menú de Colección se muestra sin desbordamiento`,
+      col.sw <= col.iw + 1 && col.rows === 6 && !col.menuHidden && col.viewHidden,
+      `sw=${col.sw} iw=${col.iw} rows=${col.rows}`);
+    await evaluate("document.querySelector('.collection-menu-row[data-slug=\"brazaletes\"]').click()");
+    await sleep(350);
+    const colView = JSON.parse(await evaluate(`JSON.stringify({
+      sw: document.documentElement.scrollWidth,
+      iw: window.innerWidth,
+      viewHidden: document.querySelector('#collection-view').hidden,
+      menuHidden: document.querySelector('#collection-menu').hidden,
+      backVisible: (() => {
+        const b = document.querySelector('#collection-back').getBoundingClientRect();
+        return b.width > 0;
+      })()
+    })`));
+    check(`[${label}] La vista de la línea abre sin desbordamiento y con botón volver`,
+      colView.sw <= colView.iw + 1 && !colView.viewHidden && colView.menuHidden && colView.backVisible,
+      JSON.stringify(colView));
+    await evaluate("document.querySelector('#collection-back').click()");
+    await sleep(350);
+    check(`[${label}] Volver restaura el menú`,
+      await evaluate("!document.querySelector('#collection-menu').hidden && document.querySelector('#collection-view').hidden"));
+  }
+
   /* --- Panel de administración (login + responsive) --- */
   await setViewport(1440, 900, false);
   await gotoWaiting(BASE + '/admin', "location.pathname === '/login'", 10000);
@@ -607,6 +679,219 @@ async function run() {
   check('[Admin PC] La sección Descuentos lista los productos',
     (await evaluate("document.querySelectorAll('.discount-card').length")) > 0);
   await screenshot('admin-desktop.png');
+
+  /* --- Selector visual de colores en el editor de productos --- */
+  const selProd = await (await fetch(`${BASE}/api/admin/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...apiAuth },
+    body: JSON.stringify({
+      name: 'Brazalete Color Admin',
+      price: 95000,
+      status: 'available',
+      published: true,
+      category: 'brazaletes',
+      variants: [
+        {
+          name: 'Color de hilo', required: true,
+          options: [
+            { label: 'Oro', color: '#d8be69', available: true },
+            { label: 'Verde', color: '#5f7a4a', available: true }
+          ]
+        }
+      ]
+    })
+  })).json();
+  const selId = selProd.product.id;
+  await gotoWaiting(BASE + '/admin', "document.querySelector('#admin-tabs') && document.querySelector('#stat-total').textContent !== '—'", 12000);
+  await evaluate("document.querySelector('.tab[data-view=\"products\"]').click()");
+  await waitFor(`document.querySelector('[data-edit="${selId}"]')`, 8000);
+  await evaluate(`document.querySelector('[data-edit="${selId}"]').click()`);
+  await waitFor("document.querySelectorAll('#variant-groups .palt').length > 0", 8000);
+  const swGui = JSON.parse(await evaluate(`JSON.stringify({
+    groups: document.querySelectorAll('#variant-groups .variant-group-box').length,
+    vsw: document.querySelectorAll('#variant-groups .vsw').length,
+    palette: document.querySelectorAll('#variant-groups .palt').length,
+    checked: document.querySelectorAll('#variant-groups .palt.in').length
+  })`));
+  check('[Admin] El editor muestra la cuadrícula de colores con sus muestras marcadas',
+    swGui.groups >= 1 && swGui.vsw === 2 && swGui.checked === 2 && swGui.palette >= 10,
+    JSON.stringify(swGui));
+  const secTitle = await evaluate("document.querySelector('#variant-groups .vg-section-title').textContent");
+  check('[Admin] La sección de colores se llama «Colores disponibles»',
+    secTitle === 'Colores disponibles', secTitle);
+
+  // Tocar una muestra de la paleta añade el color a la cuadrícula del producto
+  await evaluate("document.querySelector('#variant-groups .palt:not(.in)').click()");
+  await sleep(200);
+  const swTo = JSON.parse(await evaluate(`JSON.stringify({
+    vsw: document.querySelectorAll('#variant-groups .vsw').length,
+    checked: document.querySelectorAll('#variant-groups .palt.in').length
+  })`));
+  check('[Admin] Tocar una muestra añade el color seleccionado',
+    swTo.vsw === 3 && swTo.checked === 3, JSON.stringify(swTo));
+
+  // Modo "Un solo color": al elegir otra muestra queda solo una selección
+  await evaluate("document.querySelector('#variant-groups .vg-single').click()");
+  await sleep(100);
+  await evaluate("document.querySelector('#variant-groups .palt:not(.in)').click()");
+  await sleep(200);
+  const swSingle = JSON.parse(await evaluate(`JSON.stringify({
+    vsw: document.querySelectorAll('#variant-groups .vsw').length,
+    checked: document.querySelectorAll('#variant-groups .palt.in').length
+  })`));
+  check('[Admin] "Un solo color" limita a una muestra seleccionada',
+    swSingle.vsw === 1 && swSingle.checked === 1, JSON.stringify(swSingle));
+
+  // Color personalizado: aparece como muestra y queda seleccionada
+  await evaluate(`(() => {
+    const box = document.querySelector('#variant-groups .variant-group-box');
+    box.querySelector('.cp-color').value = '#1f3a5f';
+    box.querySelector('.cp-name').value = 'Azul capa';
+    box.querySelector('.cp-add').click();
+  })()`);
+  await sleep(250);
+  const swCustom = JSON.parse(await evaluate(`JSON.stringify({
+    tiles: document.querySelectorAll('#variant-groups .palt').length,
+    hasLabel: [...document.querySelectorAll('#variant-groups .palt')].some((t) => t.title === 'Azul capa'),
+    vsw: document.querySelectorAll('#variant-groups .vsw').length
+  })`));
+  check('[Admin] El color personalizado aparece como muestra seleccionada',
+    swCustom.hasLabel && swCustom.vsw === 1, JSON.stringify(swCustom));
+
+  // Marcar agotado: la muestra queda dim y luego volvemos a disponible
+  await evaluate("document.querySelector('#variant-groups .vsw').click()");
+  await sleep(200);
+  await evaluate("document.querySelector('#variant-groups .vg-editor .ed-available').click()");
+  await sleep(200);
+  const swOff = JSON.parse(await evaluate(`JSON.stringify({
+    offTile: document.querySelector('#variant-groups .vsw-off') !== null,
+    editorHidden: document.querySelector('#variant-groups [data-editor]').classList.contains('hidden')
+  })`));
+  check('[Admin] Marcar "Agotado" se refleja en la muestra',
+    swOff.offTile && swOff.editorHidden, JSON.stringify(swOff));
+  await evaluate("document.querySelector('#variant-groups .vsw-off').click()");
+  await sleep(200);
+  await evaluate("document.querySelector('#variant-groups .ed-available').click()");
+  await sleep(200);
+  check('[Admin] Volver a "Disponible" quita el estado agotado',
+    await evaluate("document.querySelector('#variant-groups .vsw-off') === null"));
+
+  // Cancelar para no modificar el producto y limpiar el de prueba
+  await evaluate("document.querySelector('#product-cancel').click()");
+  await sleep(200);
+  await fetch(`${BASE}/api/admin/products/${selId}`, { method: 'DELETE', headers: apiAuth });
+
+  /* --- Tallas de anillo: se agregan solas para la categoría Anillos --- */
+  const ringProd = await (await fetch(`${BASE}/api/admin/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...apiAuth },
+    body: JSON.stringify({
+      name: 'Anillo Talla Test',
+      price: 120000,
+      status: 'available',
+      published: true,
+      category: 'anillos',
+      variants: []
+    })
+  })).json();
+  const ringId = ringProd.product.id;
+  await gotoWaiting(BASE + '/admin', "document.querySelector('#admin-tabs') && document.querySelector('#stat-total').textContent !== '—'", 12000);
+  await evaluate("document.querySelector('.tab[data-view=\"products\"]').click()");
+  await waitFor(`document.querySelector('[data-edit="${ringId}"]')`, 8000);
+  await evaluate(`document.querySelector('[data-edit="${ringId}"]').click()`);
+  const szReady = await waitFor("document.querySelectorAll('#variant-groups .size-chip').length >= 19", 8000);
+  check('[Tallas] Al editar un anillo aparece la sección de tallas', szReady);
+
+  const szInit = JSON.parse(await evaluate(`JSON.stringify({
+    chips: document.querySelectorAll('#variant-groups .size-chip').length,
+    on: document.querySelectorAll('#variant-groups .size-chip.on').length,
+    off: document.querySelectorAll('#variant-groups .size-chip.off').length,
+    modeTallas: [...document.querySelectorAll('#variant-groups .vg-mode button')].some((b) => b.dataset.mode === 'tallas' && b.classList.contains('on')),
+    section: document.querySelector('#variant-groups .vg-section-title').textContent,
+    placeholder: document.querySelector('#variant-groups .vg-name').placeholder,
+    hasPalette: !!document.querySelector('#variant-groups .vg-palette')
+  })`));
+  check('[Tallas] Sección «Tallas de anillos», sin tallas activas ni selector de colores',
+    szInit.chips >= 19 && szInit.on === 0 && szInit.off >= 19 && szInit.modeTallas &&
+      szInit.section === 'Tallas de anillos' && szInit.placeholder === 'Talla del anillo' && !szInit.hasPalette,
+    JSON.stringify(szInit));
+
+  await evaluate("document.querySelector('#variant-groups .size-chip[data-size=\"14\"]').click()");
+  await sleep(120);
+  await evaluate("document.querySelector('#variant-groups .size-chip[data-size=\"12\"]').click()");
+  await sleep(120);
+  const szOn = JSON.parse(await evaluate(`JSON.stringify({
+    on: document.querySelectorAll('#variant-groups .size-chip.on').length,
+    s12: document.querySelector('#variant-groups .size-chip[data-size="12"]').classList.contains('on'),
+    s14: document.querySelector('#variant-groups .size-chip[data-size="14"]').classList.contains('on'),
+    s10: document.querySelector('#variant-groups .size-chip[data-size="10"]').classList.contains('off')
+  })`));
+  check('[Tallas] Tocar una talla la marca disponible',
+    szOn.on === 2 && szOn.s12 && szOn.s14 && szOn.s10, JSON.stringify(szOn));
+
+  await evaluate("(() => { const b = document.querySelector('#variant-groups .variant-group-box'); b.querySelector('.sp-size-name').value = '8.5'; b.querySelector('.sp-add').click(); })()");
+  await sleep(150);
+  const szCustom = JSON.parse(await evaluate(`JSON.stringify({
+    has85: document.querySelector('#variant-groups .size-chip[data-size="8.5"]') !== null,
+    on85: document.querySelector('#variant-groups .size-chip[data-size="8.5"]').classList.contains('on'),
+    chips: document.querySelectorAll('#variant-groups .size-chip').length,
+    on: document.querySelectorAll('#variant-groups .size-chip.on').length
+  })`));
+  check('[Tallas] Se puede añadir una talla extra y queda disponible',
+    szCustom.chips >= 20 && szCustom.on === 3 && szCustom.has85 && szCustom.on85, JSON.stringify(szCustom));
+
+  await evaluate("document.querySelector('#variant-groups .size-chip[data-size=\"12\"]').click()");
+  await sleep(120);
+  const szOff = JSON.parse(await evaluate(`JSON.stringify({
+    on: document.querySelectorAll('#variant-groups .size-chip.on').length,
+    s12off: document.querySelector('#variant-groups .size-chip[data-size="12"]').classList.contains('off')
+  })`));
+  check('[Tallas] Volver a tocar una talla la desactiva',
+    szOff.on === 2 && szOff.s12off, JSON.stringify(szOff));
+
+  await evaluate("document.querySelector('#product-form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))");
+  const szSaved = await waitFor("!document.querySelector('#view-products').hidden", 12000);
+  check('[Tallas] El anillo se guarda', szSaved);
+
+  await gotoWaiting(BASE + '/', "document.querySelector('#product-grid')", 10000);
+  await evaluate("location.hash = '#coleccion/anillos'");
+  const ringCard = await waitFor(`document.querySelector('[data-view="${ringId}"]')`, 8000);
+  check('[Tallas Tienda] El anillo aparece en su categoría', ringCard);
+  await evaluate(`document.querySelector('[data-view="${ringId}"]').click()`);
+  await waitFor("!document.querySelector('#product-modal').hidden", 5000);
+  const ringShop = JSON.parse(await evaluate(`JSON.stringify([...document.querySelectorAll('.variant-option')].map((b) => b.textContent.trim()))`));
+  check('[Tallas Tienda] El cliente solo ve las tallas disponibles',
+    ringShop.length === 2 && ringShop.includes('14') && ringShop.includes('8.5') && !ringShop.includes('12') && !ringShop.includes('10'),
+    JSON.stringify(ringShop));
+  await evaluate("closeModal('#product-modal')");
+  await sleep(150);
+
+  // Al re-editar un anillo, las tallas activas persisten
+  await gotoWaiting(BASE + '/admin', "document.querySelector('#admin-tabs')", 10000);
+  await evaluate("document.querySelector('.tab[data-view=\"products\"]').click()");
+  await waitFor(`document.querySelector('[data-edit="${ringId}"]')`, 8000);
+  await evaluate(`document.querySelector('[data-edit="${ringId}"]').click()`);
+  await waitFor("document.querySelectorAll('#variant-groups .size-chip').length >= 19", 8000);
+  const szReopen = JSON.parse(await evaluate(`JSON.stringify({
+    on: document.querySelectorAll('#variant-groups .size-chip.on').length,
+    s14: document.querySelector('#variant-groups .size-chip[data-size="14"]').classList.contains('on'),
+    s85: document.querySelector('#variant-groups .size-chip[data-size="8.5"]').classList.contains('on'),
+    s12: document.querySelector('#variant-groups .size-chip[data-size="12"]').classList.contains('off')
+  })`));
+  check('[Tallas] Al re-editar persisten las tallas activas',
+    szReopen.on === 2 && szReopen.s14 && szReopen.s85 && szReopen.s12, JSON.stringify(szReopen));
+
+  // Desactivar una talla y guardar: deja de existir para el cliente
+  await evaluate("document.querySelector('#variant-groups .size-chip[data-size=\"14\"]').click()");
+  await sleep(120);
+  await evaluate("document.querySelector('#product-form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))");
+  await waitFor("!document.querySelector('#view-products').hidden", 12000);
+  const pubAfter = await (await fetch(`${BASE}/api/products/${ringId}`)).json();
+  const tallaGroup = (pubAfter.product.variants || []).find((g) => /talla/i.test(g.name));
+  check('[Tallas] Desactivar una talla la quita del producto',
+    tallaGroup && tallaGroup.options.length === 1 && tallaGroup.options[0].label === '8.5',
+    JSON.stringify(pubAfter.product.variants));
+  await fetch(`${BASE}/api/admin/products/${ringId}`, { method: 'DELETE', headers: apiAuth });
 
   // Editor de imagen: elegir una foto abre el editor y "Aplicar" guarda el recorte
   await send('DOM.enable');
@@ -663,6 +948,98 @@ async function run() {
   check('[Admin móvil] La sección Respaldo muestra descargar y restaurar',
     backupShown.download && backupShown.restore && backupShown.sw <= backupShown.iw + 1);
   await screenshot('admin-mobile-backup.png');
+
+  // El editor de producto es usable en móvil (sin campos ocultos ni desbordes)
+  const tmpModal = await (await fetch(`${BASE}/api/admin/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...apiAuth },
+    body: JSON.stringify({ name: 'Temp Móvil Admin', price: 10000, status: 'available', published: true })
+  })).json();
+  const tmpId = tmpModal.product.id;
+  await evaluate("loadProducts()");
+  await evaluate("document.querySelector('.tab[data-view=\"products\"]').click()");
+  await waitFor(`document.querySelector('[data-edit="${tmpId}"]')`, 8000);
+  await evaluate(`document.querySelector('[data-edit="${tmpId}"]').click()`);
+  const editorOn = await waitFor("!document.querySelector('#view-editor').hidden && document.querySelector('#product-form')", 8000);
+  check('[Admin móvil] El editor de producto abre', editorOn);
+
+  const editorMob = JSON.parse(await evaluate(`JSON.stringify({
+    sw: document.documentElement.scrollWidth,
+    iw: window.innerWidth,
+    nameW: document.querySelector('#p-name').getBoundingClientRect().width,
+    catW: document.querySelector('#p-category').getBoundingClientRect().width,
+    descW: document.querySelector('#p-description').getBoundingClientRect().width,
+    priceW: document.querySelector('#p-price').getBoundingClientRect().width,
+    weightW: document.querySelector('#p-weight').getBoundingClientRect().width,
+    statusVisible: document.querySelector('#p-status').offsetParent !== null,
+    pubVisible: document.querySelector('#p-published').offsetParent !== null,
+    saveVisible: document.querySelector('#product-save').offsetParent !== null,
+    cancelVisible: document.querySelector('#product-cancel').offsetParent !== null,
+    variantsVisible: document.querySelector('.variants-card').offsetParent !== null,
+    fontName: parseFloat(getComputedStyle(document.querySelector('#p-name')).fontSize),
+    scrollable: document.documentElement.scrollHeight > window.innerHeight
+  })`));
+  check('[Admin móvil] Los campos del editor son visibles y sin desbordes',
+    editorMob.sw <= editorMob.iw + 1 && editorMob.nameW > 0 && editorMob.catW > 0 &&
+      editorMob.descW > 0 && editorMob.priceW > 0 && editorMob.weightW > 0 &&
+      editorMob.statusVisible && editorMob.pubVisible && editorMob.variantsVisible,
+    JSON.stringify(editorMob));
+  check('[Admin móvil] Guardar/Cancelar accesibles y formulario desplazable',
+    editorMob.saveVisible && editorMob.cancelVisible && editorMob.scrollable);
+  check('[Admin móvil] Los campos usan 16px (sin zoom automático en iOS)', editorMob.fontName >= 16, `font=${editorMob.fontName}`);
+
+  // Un anillo agrega su sección de tallas automáticamente al elegir la categoría
+  await evaluate(`(() => {
+    const sel = document.querySelector('#p-category');
+    sel.value = 'anillos';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  const mobTallas = await waitFor("document.querySelectorAll('#variant-groups .size-chip').length >= 19", 6000);
+  const mobTallasInfo = JSON.parse(await evaluate(`JSON.stringify({
+    section: document.querySelector('#variant-groups .vg-section-title') ? document.querySelector('#variant-groups .vg-section-title').textContent : '',
+    chips: document.querySelectorAll('#variant-groups .size-chip').length
+  })`));
+  check('[Admin móvil] Elegir categoría Anillos añade «Tallas de anillos»',
+    mobTallas && mobTallasInfo.section === 'Tallas de anillos' && mobTallasInfo.chips >= 19,
+    JSON.stringify(mobTallasInfo));
+
+  // El selector de colores también funciona en móvil
+  await evaluate("document.querySelector('#variant-group-add').click()");
+  await sleep(200);
+  await evaluate("document.querySelectorAll('#variant-groups .variant-group-box')[1].querySelector('[data-mode=\"colors\"]').click()");
+  await sleep(250);
+  const mobColors = JSON.parse(await evaluate(`JSON.stringify({
+    sw: document.documentElement.scrollWidth,
+    iw: window.innerWidth,
+    palt: document.querySelectorAll('#variant-groups .palt').length,
+    section: document.querySelectorAll('#variant-groups .vg-section-title')[1].textContent,
+    width: document.querySelector('#variant-groups .vg-palette-grid') ? document.querySelector('#variant-groups .vg-palette-grid').getBoundingClientRect().width : 0
+  })`));
+  check('[Admin móvil] El selector de colores muestra «Colores disponibles» sin desbordes',
+    mobColors.palt > 0 && mobColors.section === 'Colores disponibles' &&
+      mobColors.sw <= mobColors.iw + 1 && mobColors.width > 0 && mobColors.width <= mobColors.iw,
+    JSON.stringify(mobColors));
+  await evaluate("document.querySelector('.variants-card').scrollIntoView({ block: 'start' })");
+  await sleep(250);
+  await screenshot('admin-mobile-editor.png');
+  await evaluate("document.querySelector('#product-cancel').click()");
+  await sleep(200);
+
+  // El modal de confirmación cabe en la pantalla del móvil
+  await evaluate("document.querySelector('.tab[data-view=\"products\"]').click()");
+  await waitFor(`document.querySelector('[data-delete="${tmpId}"]')`, 8000);
+  await evaluate(`document.querySelector('[data-delete="${tmpId}"]').click()`);
+  const modalOn = await waitFor("!document.querySelector('#confirm-modal').hidden", 6000);
+  const modalFit = JSON.parse(await evaluate(`(() => {
+    const card = document.querySelector('#confirm-modal .confirm-card').getBoundingClientRect();
+    return JSON.stringify({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, left: card.left, right: card.right });
+  })()`));
+  check('[Admin móvil] El modal de confirmación cabe en la pantalla',
+    modalOn && modalFit.sw <= modalFit.iw + 1 && modalFit.left >= 0 && modalFit.right <= modalFit.iw + 1,
+    JSON.stringify(modalFit));
+  await evaluate("document.querySelector('#confirm-modal [data-close]').click()");
+  await sleep(150);
+  await fetch(`${BASE}/api/admin/products/${tmpId}`, { method: 'DELETE', headers: apiAuth });
 
   // Cerrar sesión: la sesión deja de ser válida
   await evaluate("document.querySelector('#logout-btn').click()");

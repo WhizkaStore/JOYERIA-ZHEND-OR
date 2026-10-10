@@ -195,68 +195,59 @@ function renderFooterRows(s) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Categorías                                                         */
+/* Colección: menú de líneas y vista por categoría                    */
 /* ------------------------------------------------------------------ */
 
+// Orden fijo de las líneas, tal como se exhiben en el menú de Colección.
+const COLLECTION_ORDER = ['anillos', 'aretes', 'brazaletes', 'encanto-artesanal', 'cadenas', 'dijes'];
+
+function orderedCategories() {
+  const rank = (c) => {
+    const index = COLLECTION_ORDER.indexOf(c.slug);
+    return index === -1 ? COLLECTION_ORDER.length : index;
+  };
+  return [...state.categories].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'es'));
+}
+
 function categoryCount(slug) {
-  return slug === 'todas' ? state.products.length : state.products.filter((p) => p.category === slug).length;
+  return state.products.filter((p) => p.category === slug).length;
 }
 
-function renderCategories() {
-  const chips = $('#category-chips');
-  const grid = $('#category-grid');
-  const nav = $('#nav-categories');
-
-  const active = state.filter;
-
-  chips.innerHTML = [
-    `<button type="button" class="chip ${active === 'todas' ? 'active' : ''}" data-slug="todas">Todas</button>`,
-    ...state.categories.map(
-      (c) =>
-        `<button type="button" class="chip ${active === c.slug ? 'active' : ''}" data-slug="${esc(c.slug)}">${esc(c.name)}</button>`
-    )
-  ].join('');
-
-  grid.innerHTML = state.categories
-    .map(
-      (c) => `
-      <button type="button" class="category-card" data-slug="${esc(c.slug)}">
-        <span class="category-name">${esc(c.name)}</span>
-        <span class="category-count">${categoryCount(c.slug)} ${categoryCount(c.slug) === 1 ? 'pieza' : 'piezas'}</span>
-      </button>`
-    )
-    .join('');
-
-  nav.innerHTML = state.categories
-    .slice(0, 6)
-    .map((c) => `<a class="nav-link nav-cat-link" href="#coleccion/${esc(c.slug)}" data-slug="${esc(c.slug)}">${esc(c.name)}</a>`)
-    .join('');
-
-  chips.querySelectorAll('[data-slug]').forEach((btn) =>
-    btn.addEventListener('click', () => applyFilter(btn.dataset.slug))
-  );
-  grid.querySelectorAll('[data-slug]').forEach((btn) =>
-    btn.addEventListener('click', () => {
-      applyFilter(btn.dataset.slug);
-      const panel = $('#coleccion');
-      if (panel) panel.scrollIntoView({ behavior: 'smooth' });
+function renderCollectionMenu() {
+  const list = $('#collection-menu-list');
+  list.innerHTML = orderedCategories()
+    .map((c) => {
+      const count = categoryCount(c.slug);
+      return `
+      <a class="collection-menu-row" href="#coleccion/${esc(c.slug)}" data-slug="${esc(c.slug)}">
+        <span class="cmr-text">
+          <span class="cmr-name">${esc(c.name)}</span>
+          <span class="cmr-count">${count} ${count === 1 ? 'pieza' : 'piezas'}</span>
+        </span>
+        <span class="cmr-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+        </span>
+      </a>`;
     })
-  );
-  nav.querySelectorAll('[data-slug]').forEach((btn) =>
-    btn.addEventListener('click', () => {
-      applyFilter(btn.dataset.slug);
-      closeMenu();
-    })
-  );
+    .join('') || '<p class="catalog-note">Aún no hay líneas en la colección.</p>';
 }
 
-function applyFilter(slug, fromHash) {
-  state.filter = slugToFilter(slug);
-  renderCategories();
-  renderProducts();
-  if (!fromHash) {
-    const hash = state.filter === 'todas' ? '#coleccion' : `#coleccion/${encodeURIComponent(state.filter)}`;
-    if (window.location.hash !== hash) history.replaceState(null, '', hash);
+function renderCollection() {
+  const hashSlug = parseCollectionHash();
+  const menu = $('#collection-menu');
+  const view = $('#collection-view');
+  const showView = !!hashSlug;
+  menu.hidden = showView;
+  view.hidden = !showView;
+  if (showView) {
+    const slug = slugToFilter(hashSlug);
+    const cat = state.categories.find((c) => c.slug === slug);
+    $('#collection-view-title').textContent = cat ? cat.name : slug === 'todas' ? 'Todas las piezas' : slug;
+    state.filter = slug;
+    renderProducts();
+  } else {
+    state.filter = 'todas';
+    renderCollectionMenu();
   }
 }
 
@@ -379,7 +370,8 @@ function setAvailability(text, isError) {
 function renderVariants() {
   const product = state.currentProduct;
   const wrap = $('#pm-variants');
-  const groups = product && Array.isArray(product.variants) ? product.variants : [];
+  const groups = (product && Array.isArray(product.variants) ? product.variants : [])
+    .filter((g) => g.options && g.options.length);
 
   if (!groups.length) {
     wrap.innerHTML = '';
@@ -435,7 +427,7 @@ function selectionErrors(product) {
   const errors = [];
   const groups = product && Array.isArray(product.variants) ? product.variants : [];
   for (const group of groups) {
-    if (group.required && !state.selections[group.id]) {
+    if (group.required && group.options && group.options.length && !state.selections[group.id]) {
       errors.push(`Selecciona ${group.name.toLowerCase()}.`);
     }
   }
@@ -624,7 +616,12 @@ function renderCart() {
       const p = line.snapshot || {};
       const unit = Number(p.final_price ?? p.price) || 0;
       const variantText = line.selections && line.selections.length
-        ? line.selections.map((s) => `${esc(s.group_name)}: ${esc(s.option_label)}`).join(' · ')
+        ? line.selections
+            .map(
+              (s) =>
+                `${s.color ? `<span class="line-swatch" style="--vc:${esc(s.color)}"></span>` : ''}${esc(s.group_name)}: ${esc(s.option_label)}`
+            )
+            .join(' · ')
         : '';
       return `
       <article class="cart-item">
@@ -976,11 +973,7 @@ function initEvents() {
   });
   nav.querySelectorAll('.nav-link').forEach((link) => link.addEventListener('click', closeMenu));
 
-  window.addEventListener('hashchange', () => {
-    const hashSlug = parseCollectionHash();
-    if (hashSlug) applyFilter(hashSlug, true);
-    else if (state.filter !== 'todas') applyFilter('todas', true);
-  });
+  window.addEventListener('hashchange', renderCollection);
 
   window.addEventListener('scroll', () => {
     $('#site-header').classList.toggle('scrolled', window.scrollY > 12);
@@ -999,10 +992,7 @@ async function init() {
   await loadData();
   applySettings();
   loadCart();
-  renderCategories();
-  const hashSlug = parseCollectionHash();
-  if (hashSlug) state.filter = slugToFilter(hashSlug);
-  renderProducts();
+  renderCollection();
   renderCart();
   initEvents();
   observeReveal();

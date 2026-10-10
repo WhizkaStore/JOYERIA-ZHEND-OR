@@ -158,6 +158,102 @@ let pendingLogo = null;
 let deleteId = null;
 let editorVariants = [];
 let variantIdSeed = 1;
+let colorPalette = [];
+const currentOption = { g: null, o: null };
+
+/* Colores de fábrica que siempre aparecen en la cuadrícula del editor. */
+const BASE_COLORS = [
+  ['Dorado', '#d8be69'],
+  ['Oro viejo', '#b8933d'],
+  ['Champagne', '#e9ddba'],
+  ['Plata', '#c0c0c0'],
+  ['Negro', '#2a2a2a'],
+  ['Blanco', '#f5f3ee'],
+  ['Marfil', '#fffff0'],
+  ['Beige', '#dcd3bf'],
+  ['Camel', '#c19a6b'],
+  ['Marrón', '#6f4e37'],
+  ['Chocolate', '#4a3127'],
+  ['Burdeos', '#7a2e2e'],
+  ['Rojo', '#a63432'],
+  ['Coral', '#e86850'],
+  ['Terracota', '#cb7a5a'],
+  ['Rosado', '#d98ba8'],
+  ['Rosa palo', '#e8c4c4'],
+  ['Rosa cuarzo', '#f7b3c4'],
+  ['Fucsia', '#c71585'],
+  ['Naranja', '#d9822b'],
+  ['Amarillo', '#e8b23a'],
+  ['Oliva', '#8a9a6b'],
+  ['Verde esmeralda', '#2f7d63'],
+  ['Verde bosque', '#3d5c4a'],
+  ['Turquesa', '#3fa9a0'],
+  ['Celeste', '#a8cfdd'],
+  ['Azul acero', '#5b7c99'],
+  ['Azul marino', '#2e4a6e'],
+  ['Lavanda', '#c6b9db'],
+  ['Morado', '#7b5e9b'],
+  ['Violeta', '#5a3d6e'],
+  ['Gris perla', '#b9b4aa']
+];
+
+const normalizeHex = (hex) => {
+  let value = String(hex || '').trim().toLowerCase();
+  if (!value) return null;
+  if (value[0] !== '#') value = '#' + value;
+  if (/^#([0-9a-f]{3})$/.test(value)) {
+    value = '#' + value.slice(1).split('').map((d) => d + d).join('');
+  }
+  return /^#[0-9a-f]{6}$/.test(value) ? value : null;
+};
+
+async function loadColorPalette() {
+  let saved = [];
+  try {
+    saved = (await api('/api/admin/palette')).colors || [];
+  } catch {
+    saved = [];
+  }
+  const map = new Map();
+  const add = (label, hex, source) => {
+    const h = normalizeHex(hex);
+    if (!h) return;
+    const key = h.toLowerCase();
+    const prev = map.get(key);
+    const labelOk = String(label || '').trim();
+    if (!prev) {
+      map.set(key, { label: labelOk || h, hex: h, source });
+    } else if (source === 'save' || (source === 'base' && prev.source === 'derived')) {
+      prev.label = labelOk || h;
+      prev.source = source;
+    }
+  };
+  saved.forEach((c) => add(c.label, c.hex, 'save'));
+  BASE_COLORS.forEach(([label, hex]) => add(label, hex, 'base'));
+  productsAll.forEach((p) => {
+    (p.variants || []).forEach((g) => {
+      (g.options || []).forEach((o) => {
+        if (o.color) add(o.label || o.color, o.color, 'derived');
+      });
+    });
+  });
+  colorPalette = [...map.values()].map(({ label, hex }) => ({ label, hex }));
+}
+
+function persistPalette() {
+  return api('/api/admin/palette', { method: 'PUT', body: { colors: colorPalette } }).catch(() => {});
+}
+
+function upsertPalette(label, hex) {
+  const h = normalizeHex(hex);
+  if (!h) return null;
+  const key = h.toLowerCase();
+  const existing = colorPalette.find((c) => c.hex.toLowerCase() === key);
+  const name = String(label || '').trim() || existing?.label || h;
+  if (existing) existing.label = name;
+  else colorPalette.push({ label: name, hex: h });
+  return h;
+}
 
 async function loadProducts() {
   try {
@@ -374,6 +470,7 @@ function openEditor(id = null) {
     renderVariantsEditor([]);
   }
 
+  ensureRingSizeGroup();
   setActiveTab('new');
   showPanel('editor');
   updateDiscountPreview();
@@ -508,8 +605,40 @@ function showFormError(el, message) {
 /* Editor de variantes de producto                                    */
 /* ------------------------------------------------------------------ */
 
+const SIZE_PRESET = ['6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24'];
+
+const SIZE_RE = /talla|tama|medida|num|numero|numeración/i;
+const COLOR_RE = /color|hilo|tono|tapiz|material|cinta/i;
+
+// Determina el tipo de grupo: 'colors', 'tallas' u 'opciones'.
+function modeOfGroup(g) {
+  g = g || {};
+  const name = String(g.name || '');
+  if (SIZE_RE.test(name)) return 'tallas';
+  if (COLOR_RE.test(name) || (g.options || []).some((o) => o && o.color)) return 'colors';
+  return 'opciones';
+}
+
 function nextVariantId() {
   return variantIdSeed++;
+}
+
+// Garantiza que un anillo tenga su grupo de "Tallas de anillos".
+// No duplica si ya existe y conserva las tallas guardadas.
+function ensureRingSizeGroup() {
+  const sel = document.getElementById('p-category');
+  if (!sel || sel.value !== 'anillos') return;
+  const hasSizes = editorVariants.some((g) => (g.mode || modeOfGroup(g)) === 'tallas');
+  if (hasSizes) return;
+  editorVariants.push({
+    _gid: nextVariantId(),
+    name: 'Talla del anillo',
+    required: true,
+    single: false,
+    mode: 'tallas',
+    options: []
+  });
+  renderVariantsEditor(editorVariants);
 }
 
 function renderVariantsEditor(groups) {
@@ -518,6 +647,8 @@ function renderVariantsEditor(groups) {
     _gid: nextVariantId(),
     name: g.name || '',
     required: !!g.required,
+    single: !!g.single,
+    mode: modeOfGroup(g),
     options: (g.options || []).map((o) => ({
       _oid: nextVariantId(),
       label: o.label || '',
@@ -526,61 +657,177 @@ function renderVariantsEditor(groups) {
     }))
   }));
 
+  const findGroup = (gid) => editorVariants.find((g) => g._gid === gid);
+  const findOption = (g, oid) => g.options.find((o) => o._oid === oid);
+  const pushColor = (g, hex, label) => {
+    g.options.push({
+      _oid: nextVariantId(),
+      label: String(label || '').trim() || hex,
+      color: hex,
+      available: true
+    });
+  };
+  const hasHex = (g, hex) => g.options.some((o) => normalizeHex(o.color) === hex);
+
+  const closeEditor = () => {
+    document.querySelectorAll('[data-editor]').forEach((el) => el.classList.add('hidden'));
+    currentOption.g = null;
+    currentOption.o = null;
+  };
+
   const render = () => {
     if (!editorVariants.length) {
       container.innerHTML =
         '<p class="empty-note variants-empty">Sin variantes. Añade grupos de color, talla u otra opción.</p>';
-      bindEmpty();
       return;
     }
-    container.innerHTML = editorVariants
-      .map(
-        (g) => `
-      <div class="variant-group-box" data-gid="${g._gid}">
-        <div class="vg-head">
-          <input type="text" class="vg-name" value="${esc(g.name)}" maxlength="80"
-                 placeholder="Nombre del grupo (ej. Color de hilo)" aria-label="Nombre del grupo de variantes">
-          <label class="switch switch-mini">
-            <input type="checkbox" class="vg-required" ${g.required ? 'checked' : ''}>
-            <span>Obligatorio</span>
-          </label>
-          <button type="button" class="icon-action danger vg-remove" title="Quitar grupo" aria-label="Quitar grupo">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </button>
-        </div>
-        <div class="vg-options">
-          ${g.options
-            .map(
-              (o) => `
-          <div class="vg-option" data-oid="${o._oid}">
-            <label class="color-field" title="Color de la muestra (opcional)">
-              <input type="color" class="vo-color" value="${esc(o.color || '#d8be69')}" aria-label="Color de la muestra">
-            </label>
-            <input type="text" class="vo-label" value="${esc(o.label)}" maxlength="80"
-                   placeholder="Opción (ej. Azul)" aria-label="Nombre de la opción">
-            <label class="switch switch-mini">
-              <input type="checkbox" class="vo-available" ${o.available ? 'checked' : ''}>
-              <span>Disponible</span>
-            </label>
-            <button type="button" class="icon-action danger vo-remove" title="Quitar opción" aria-label="Quitar opción">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-            </button>
-          </div>`
-            )
-            .join('')}
-        </div>
-        <button type="button" class="btn btn-ghost btn-small vg-opt-add" data-gid="${g._gid}">+ Opción</button>
-      </div>`
-      )
-      .join('');
-    bindGroupEvents();
+    container.innerHTML = editorVariants.map(renderGroup).join('');
+    bindEvents();
   };
 
-  const bindEmpty = () => {};
+  const renderGroup = (g) => {
+    const gid = g._gid;
+    if (!g.mode) g.mode = modeOfGroup(g);
+    const sizesMode = g.mode === 'tallas';
+    const colorsMode = g.mode === 'colors';
 
-  const findGroup = (gid) => editorVariants.find((g) => g._gid === gid);
+    const sectionTitle = sizesMode
+      ? 'Tallas de anillos'
+      : colorsMode
+        ? 'Colores disponibles'
+        : 'Opciones del grupo';
+    const sectionHint = sizesMode
+      ? 'Toca las tallas que estén disponibles. La tienda solo mostrará las marcadas.'
+      : colorsMode
+        ? 'Toca una muestra para añadirla o quitarla del producto.'
+        : 'Añade y edita las opciones de este grupo.';
 
-  const bindGroupEvents = () => {
+    const modeSwitch = `
+      <div class="vg-mode" role="group" aria-label="Tipo de variante">
+        <button type="button" class="${colorsMode ? 'on' : ''}" data-mode="colors">Colores</button>
+        <button type="button" class="${sizesMode ? 'on' : ''}" data-mode="tallas">Tallas</button>
+        <button type="button" class="${g.mode === 'opciones' ? 'on' : ''}" data-mode="opciones">Opciones</button>
+      </div>`;
+
+    const sizeLabels = [];
+    SIZE_PRESET.forEach((s) => {
+      if (!sizeLabels.includes(s)) sizeLabels.push(s);
+    });
+    g.options.forEach((o) => {
+      const l = String(o.label || '').trim();
+      if (l && !sizeLabels.includes(l)) sizeLabels.push(l);
+    });
+    const sizeTiles = sizeLabels
+      .map((size) => {
+        const opt = g.options.find((o) => o.label === size);
+        const on = !!(opt && opt.available);
+        return `
+        <button type="button" class="size-chip ${on ? 'on' : 'off'}" data-size="${esc(size)}" title="Marcar talla ${esc(size)} como ${on ? 'no disponible' : 'disponible'}">
+          <span class="size-num">${esc(size)}</span>
+          <span class="size-state">${on ? 'Disponible' : 'Agotado'}</span>
+        </button>`;
+      })
+      .join('');
+    const tiles = g.options
+      .map(
+        (o) => `
+        <button type="button" class="vsw ${o.available ? '' : 'vsw-off'}" data-gid="${gid}" data-oid="${o._oid}" title="Editar ${esc(o.label)}">
+          <span class="vsw-dot" style="--vc:${esc(o.color || '#d8be69')}"></span>
+          <span class="vsw-name">${esc(o.label || '(sin nombre)')}</span>
+          ${o.available ? '' : '<span class="vsw-tag">Agotado</span>'}
+          <span class="vsw-edit" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M5 17l11-11 3 3-11 11-4 1z"/></svg>
+          </span>
+        </button>`
+      )
+      .join('');
+
+    const paletteBlock = colorsMode
+      ? `<div class="vg-palette">
+           <p class="vg-label">Paleta · toca una muestra para añadirla o quitarla del producto</p>
+           <div class="vg-palette-grid">
+             ${colorPalette
+               .map((c) => `
+               <button type="button" class="palt ${hasHex(g, c.hex) ? 'in' : ''}" data-gid="${gid}" data-hex="${esc(c.hex)}" title="${esc(c.label)}">
+                 <span class="vsw-dot" style="--vc:${esc(c.hex)}"></span>
+                 <span class="vsw-name">${esc(c.label)}</span>
+                 <span class="palt-check" aria-hidden="true">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                 </span>
+               </button>`)
+               .join('')}
+           </div>
+           <div class="vg-custom">
+             <input type="color" class="cp-color" value="#d8be69" aria-label="Tonalidad del color nuevo">
+             <input type="text" class="cp-name" maxlength="40" placeholder="Nombre del color (ej. Azul capa)" aria-label="Nombre del color nuevo">
+             <button type="button" class="btn btn-ghost btn-small cp-add" data-gid="${gid}">Añadir color</button>
+           </div>
+         </div>`
+      : '';
+
+    const editorBlock = sizesMode
+      ? ''
+      : `<div class="vg-editor hidden" data-editor>
+        <p class="vg-label">Editar color</p>
+        <div class="vg-editor-row">
+          <label class="color-field" title="Tonalidad">
+            <input type="color" class="ed-color" value="#d8be69" aria-label="Tonalidad">
+          </label>
+          <input type="text" class="ed-label" maxlength="80" placeholder="Nombre del color (ej. Azul)" aria-label="Nombre del color">
+          <label class="switch switch-mini">
+            <input type="checkbox" class="ed-available" checked>
+            <span>Disponible</span>
+          </label>
+          <button type="button" class="btn btn-danger btn-small ed-remove">Quitar</button>
+          <button type="button" class="btn btn-ghost btn-small ed-done">Listo</button>
+        </div>
+      </div>`;
+
+    const contentBlock = sizesMode
+      ? `<div class="vg-sizes">
+           <p class="vg-label">Marca las tallas disponibles de este anillo:</p>
+           <div class="vg-size-grid">${sizeTiles}</div>
+           <div class="vg-custom">
+             <input type="text" class="sp-size-name" maxlength="12" placeholder="Otra talla (ej. 12.5)" aria-label="Otra talla">
+             <button type="button" class="btn btn-ghost btn-small sp-add" data-gid="${gid}">Añadir talla</button>
+           </div>
+         </div>`
+      : `<div class="vg-swatches">
+           ${tiles || '<p class="vg-label">Aún sin opciones.</p>'}
+         </div>
+         <button type="button" class="btn btn-ghost btn-small vg-opt-add" data-gid="${gid}">+ Añadir opción</button>
+         ${paletteBlock}`;
+
+    return `
+    <div class="variant-group-box" data-gid="${gid}" data-mode="${g.mode}">
+      <div class="vg-head">
+        <input type="text" class="vg-name" value="${esc(g.name)}" maxlength="80"
+               placeholder="${sizesMode ? 'Talla del anillo' : 'Nombre del grupo (ej. Color de hilo)'}" aria-label="Nombre del grupo de variantes">
+        ${modeSwitch}
+        <label class="switch switch-mini">
+          <input type="checkbox" class="vg-required" ${g.required ? 'checked' : ''}>
+          <span>Obligatorio</span>
+        </label>
+        ${sizesMode ? '' : `<label class="switch switch-mini" title="Limita la selección a un solo color en este grupo">
+          <input type="checkbox" class="vg-single" ${g.single ? 'checked' : ''}>
+          <span>Un solo color</span>
+        </label>`}
+        <button type="button" class="icon-action danger vg-remove" title="Quitar grupo" aria-label="Quitar grupo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="vg-section">
+        <h4 class="vg-section-title">${sectionTitle}</h4>
+        <p class="vg-section-hint">${sectionHint}</p>
+      </div>
+
+      ${editorBlock}
+      ${contentBlock}
+    </div>`;
+  };
+
+  const bindEvents = () => {
     container.querySelectorAll('.variant-group-box').forEach((box) => {
       const gid = Number(box.dataset.gid);
       const group = findGroup(gid);
@@ -588,35 +835,168 @@ function renderVariantsEditor(groups) {
       box.querySelector('.vg-name').addEventListener('input', (e) => {
         group.name = e.target.value;
       });
+      box.querySelectorAll('.vg-mode button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const next = btn.dataset.mode;
+          if (!next || next === group.mode) return;
+          group.mode = next;
+          if (next === 'tallas' && !String(group.name || '').trim()) {
+            group.name = 'Talla del anillo';
+          }
+          render();
+        });
+      });
       box.querySelector('.vg-required').addEventListener('change', (e) => {
         group.required = e.target.checked;
       });
+      const singleSwitch = box.querySelector('.vg-single');
+      if (singleSwitch) {
+        singleSwitch.addEventListener('change', (e) => {
+          group.single = e.target.checked;
+        });
+      }
       box.querySelector('.vg-remove').addEventListener('click', () => {
         editorVariants = editorVariants.filter((g) => g._gid !== gid);
         render();
       });
-      box.querySelector('.vg-opt-add').addEventListener('click', () => {
-        group.options.push({ _oid: nextVariantId(), label: '', color: '', available: true });
-        render();
-      });
+      const optAdd = box.querySelector('.vg-opt-add');
+      if (optAdd) {
+        optAdd.addEventListener('click', () => {
+          pushColor(group, '', '');
+          render();
+        });
+      }
 
-      box.querySelectorAll('.vg-option').forEach((optBox) => {
-        const oid = Number(optBox.dataset.oid);
-        const option = group.options.find((o) => o._oid === oid);
-        optBox.querySelector('.vo-label').addEventListener('input', (e) => {
-          option.label = e.target.value;
-        });
-        optBox.querySelector('.vo-color').addEventListener('input', (e) => {
-          option.color = e.target.value;
-        });
-        optBox.querySelector('.vo-available').addEventListener('change', (e) => {
-          option.available = e.target.checked;
-        });
-        optBox.querySelector('.vo-remove').addEventListener('click', () => {
-          group.options = group.options.filter((o) => o._oid !== oid);
+      box.querySelectorAll('.size-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          const size = chip.dataset.size;
+          const existing = group.options.find((o) => o.label === size);
+          if (existing && existing.available) {
+            group.options = group.options.filter((o) => o.label !== size);
+          } else if (existing) {
+            existing.available = true;
+          } else {
+            group.options.push({ _oid: nextVariantId(), label: size, color: '', available: true });
+          }
           render();
         });
       });
+
+      const addSizeInput = box.querySelector('.sp-size-name');
+      const addSizeBtn = box.querySelector('.sp-add');
+      const addSize = () => {
+        const name = String(addSizeInput ? addSizeInput.value : '').trim();
+        if (!name) {
+          showToast('Escribe una talla válida.', true);
+          return;
+        }
+        const existing = group.options.find((o) => o.label === name);
+        if (existing) existing.available = true;
+        else group.options.push({ _oid: nextVariantId(), label: name, color: '', available: true });
+        if (addSizeInput) addSizeInput.value = '';
+        render();
+      };
+      if (addSizeBtn) addSizeBtn.addEventListener('click', addSize);
+      if (addSizeInput) addSizeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addSize();
+        }
+      });
+
+      const editorEl = box.querySelector('[data-editor]');
+      const openEditorFor = (oid) => {
+        currentOption.g = group;
+        currentOption.o = findOption(group, oid);
+        if (!currentOption.o) return;
+        editorEl.classList.remove('hidden');
+        const color = editorEl.querySelector('.ed-color');
+        const label = editorEl.querySelector('.ed-label');
+        const avail = editorEl.querySelector('.ed-available');
+        color.value = currentOption.o.color || '#d8be69';
+        label.value = currentOption.o.label || '';
+        avail.checked = currentOption.o.available !== false;
+        color.oninput = () => {
+          const h = normalizeHex(color.value);
+          if (h) {
+            currentOption.o.color = h;
+            if (upsertPalette(currentOption.o.label, h)) persistPalette();
+          }
+        };
+        label.oninput = () => {
+          currentOption.o.label = label.value;
+          if (upsertPalette(label.value, currentOption.o.color)) persistPalette();
+        };
+        avail.onchange = () => {
+          currentOption.o.available = avail.checked;
+          closeEditor();
+          currentOption.g = null;
+          currentOption.o = null;
+          render();
+        };
+        editorEl.querySelector('.ed-remove').onclick = () => {
+          group.options = group.options.filter((o) => o._oid !== oid);
+          closeEditor();
+          render();
+        };
+        editorEl.querySelector('.ed-done').onclick = () => {
+          closeEditor();
+          currentOption.g = null;
+          currentOption.o = null;
+          if (group.mode === 'colors' && !box.querySelector('.vg-palette')) render();
+        };
+      };
+
+      box.querySelectorAll('.vsw[data-oid]').forEach((tile) => {
+        tile.addEventListener('click', () => openEditorFor(Number(tile.dataset.oid)));
+      });
+
+      box.querySelectorAll('.palt').forEach((tile) => {
+        tile.addEventListener('click', () => {
+          const hex = normalizeHex(tile.dataset.hex);
+          if (!hex) return;
+          const entry = colorPalette.find((c) => c.hex.toLowerCase() === hex.toLowerCase());
+          closeEditor();
+          if (group.single) {
+            group.options = !hasHex(group, hex)
+              ? [{ _oid: nextVariantId(), label: entry ? entry.label : hex, color: hex, available: true }]
+              : [];
+          } else {
+            const existing = group.options.find((o) => normalizeHex(o.color) === hex);
+            if (existing) group.options = group.options.filter((o) => o._oid !== existing._oid);
+            else pushColor(group, hex, entry ? entry.label : hex);
+          }
+          render();
+        });
+      });
+
+      const cpAdd = box.querySelector('.cp-add');
+      if (cpAdd) {
+        cpAdd.addEventListener('click', () => {
+        const hex = normalizeHex(box.querySelector('.cp-color').value);
+        if (!hex) {
+          showToast('Selecciona una tonalidad válida.', true);
+          return;
+        }
+        const name = box.querySelector('.cp-name').value.trim();
+        upsertPalette(name, hex);
+        persistPalette();
+        const entry = colorPalette.find((c) => c.hex === hex);
+        if (group.single) {
+          group.options = !hasHex(group, hex)
+            ? [{ _oid: nextVariantId(), label: name || (entry ? entry.label : hex), color: hex, available: true }]
+            : [];
+        } else {
+          const existing = group.options.find((o) => normalizeHex(o.color) === hex);
+          if (existing) existing.label = name || existing.label;
+          else pushColor(group, hex, name || (entry ? entry.label : hex));
+        }
+        box.querySelector('.cp-name').value = '';
+        closeEditor();
+        render();
+        showToast(`Color ${name || hex} añadido.`);
+        });
+      }
     });
   };
 
@@ -1061,9 +1441,11 @@ function initEvents() {
   $('#settings-form').addEventListener('submit', saveSettings);
 
   $('#variant-group-add').addEventListener('click', () => {
-    editorVariants.push({ _gid: nextVariantId(), name: '', required: false, options: [] });
+    editorVariants.push({ _gid: nextVariantId(), name: '', required: false, single: false, mode: 'opciones', options: [] });
     renderVariantsEditor(editorVariants);
   });
+
+  $('#p-category').addEventListener('change', ensureRingSizeGroup);
 
   $('#cat-create').addEventListener('click', createCategory);
   $('#cat-name').addEventListener('keydown', (e) => {
@@ -1139,6 +1521,7 @@ async function init() {
   }
   initEvents();
   await Promise.all([loadProducts(), loadCategories()]);
+  await loadColorPalette();
   switchView('dashboard');
 }
 

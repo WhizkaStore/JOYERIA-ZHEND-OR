@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=2">
+  <link rel="stylesheet" href="/css/style.css?v=3">
 </head>
 <body>
 
@@ -47,7 +47,6 @@
       <nav class="main-nav" id="main-nav" aria-label="Navegación principal">
         <a href="#inicio" class="nav-link">Inicio</a>
         <a href="#coleccion" class="nav-link">Colección</a>
-        <span class="nav-categories" id="nav-categories"></span>
         <a href="#contacto" class="nav-link">Contacto</a>
       </nav>
 
@@ -116,19 +115,27 @@
 
     <!-- ======================= COLECCIÓN ======================= -->
     <section class="section collection" id="coleccion">
-      <div class="container">
-        <header class="section-head reveal">
-          <p class="section-eyebrow">Nuestra colección</p>
-          <h2 class="section-title">Piezas con alma</h2>
-          <p class="section-sub">Cada joya se presenta con luz natural, tal cual es. Selecciona la tuya y escríbenos por WhatsApp para reservarla.</p>
+      <div class="collection-menu" id="collection-menu">
+        <div class="container">
+          <header class="section-head reveal">
+            <p class="section-eyebrow">Nuestra colección</p>
+            <h2 class="section-title">Piezas con alma</h2>
+            <p class="section-sub">Elige una línea y descubre las piezas que la componen.</p>
+          </header>
+          <div class="collection-menu-list" id="collection-menu-list" aria-label="Líneas de la colección"></div>
+        </div>
+      </div>
+
+      <div class="collection-view container" id="collection-view" hidden>
+        <a class="collection-back" href="#coleccion" id="collection-back" aria-label="Volver a la lista de líneas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          Colección
+        </a>
+        <header class="section-head collection-view-head">
+          <p class="section-eyebrow">Línea</p>
+          <h2 class="section-title" id="collection-view-title"></h2>
         </header>
-
-        <div class="category-grid" id="category-grid" aria-label="Categorías de la colección"></div>
-
-        <nav class="category-chips" id="category-chips" aria-label="Filtrar la colección"></nav>
-
         <div class="product-grid" id="product-grid" aria-live="polite"></div>
-
         <p class="catalog-note" id="catalog-note" hidden></p>
       </div>
     </section>
@@ -329,6 +336,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="/js/message.js?v=2"></script>
-  <script src="/js/site.js?v=2"></script>
+  <script src="/js/site.js?v=3"></script>
 </body>
 </html>

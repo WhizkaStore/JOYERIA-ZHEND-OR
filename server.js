@@ -265,7 +265,7 @@ function buildSelections(product, rawSelections) {
     }
     const option = group.options.find((o) => o.id === oid);
     if (!option) {
-      errors.push('La configuración del producto no es válida.');
+      errors.push(`La opción de "${group.name}" ya no está disponible. Actualiza tu selección.`);
       continue;
     }
     if (!option.available) {
@@ -1064,6 +1064,60 @@ route('PUT', '/api/admin/products/:id/variants', async (req, res, params) => {
     return sendJson(res, 500, { error: 'No se pudieron guardar las variantes.' });
   }
   sendJson(res, 200, { variants: getVariants(id) });
+});
+
+/* --- Paleta de colores del editor de productos (protegida) --- */
+
+function normalizeHex(value) {
+  let hex = String(value || '').trim().toLowerCase();
+  if (!hex) return null;
+  if (hex[0] !== '#') hex = '#' + hex;
+  if (/^#([0-9a-f]{3})$/.test(hex)) {
+    hex = '#' + hex.slice(1).split('').map((d) => d + d).join('');
+  }
+  return /^#[0-9a-f]{6}$/.test(hex) ? hex : null;
+}
+
+function parsePalette() {
+  let parsed = [];
+  try {
+    parsed = JSON.parse(getSettings().color_palette || '[]');
+  } catch {
+    parsed = [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((c) => c && typeof c.label === 'string' && normalizeHex(c.hex))
+    .map((c) => ({ label: cleanStr(c.label, 40) || c.hex, hex: normalizeHex(c.hex) }));
+}
+
+route('GET', '/api/admin/palette', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  sendJson(res, 200, { colors: parsePalette() });
+});
+
+route('PUT', '/api/admin/palette', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  let body;
+  try {
+    body = await readJson(req);
+  } catch (error) {
+    return sendJson(res, 400, { error: error.message });
+  }
+  const colors = Array.isArray(body.colors) ? body.colors : [];
+  if (colors.length > 400) {
+    return sendJson(res, 400, { error: 'Demasiados colores en la paleta.' });
+  }
+  const seen = new Set();
+  const out = [];
+  for (const c of colors) {
+    const hex = c && c.hex ? normalizeHex(c.hex) : null;
+    if (!hex || seen.has(hex)) continue;
+    seen.add(hex);
+    out.push({ label: cleanStr(c.label, 40) || hex, hex });
+  }
+  stmts.setSetting.run('color_palette', JSON.stringify(out));
+  sendJson(res, 200, { colors: out });
 });
 
 route('GET', '/api/admin/settings', (req, res) => {

@@ -306,6 +306,34 @@ async function run() {
   check('El envío "35.000" se guarda como 35000',
     shipDot.status === 200 && shipDot.body.settings.shipping_cost === '35000');
 
+  // 10b. Paleta de colores del editor de productos
+  const palEmpty = await json('/api/admin/palette', { headers: auth });
+  check('GET /api/admin/palette responde para el admin',
+    palEmpty.status === 200 && Array.isArray(palEmpty.body.colors));
+  const palSave = await json('/api/admin/palette', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...auth },
+    body: JSON.stringify({
+      colors: [
+        { label: 'Azul capa', hex: '#1F3A5F' },
+        { label: 'Corto', hex: '#abc' },
+        { label: 'Inválido', hex: 'zzz' }
+      ]
+    })
+  });
+  check('PUT /api/admin/palette guarda, normaliza hex cortos y filtra inválidos',
+    palSave.status === 200 &&
+      palSave.body.colors.some((c) => c.hex === '#1f3a5f' && c.label === 'Azul capa') &&
+      palSave.body.colors.some((c) => c.hex === '#aabbcc' && c.label === 'Corto') &&
+      !palSave.body.colors.some((c) => c.hex === 'zzz'),
+    JSON.stringify(palSave.body?.colors));
+  const palGet = await json('/api/admin/palette', { headers: auth });
+  check('GET /api/admin/palette devuelve lo guardado',
+    palGet.status === 200 && palGet.body.colors.some((c) => c.hex === '#1f3a5f' && c.label === 'Azul capa'),
+    JSON.stringify(palGet.body?.colors));
+  const palNoAuth = await json('/api/admin/palette');
+  check('La paleta requiere sesión admin', palNoAuth.status === 401, 'status ' + palNoAuth.status);
+
   // 11. Placeholder SVG
   const ph = await fetch(BASE + '/placeholder?name=Prueba');
   check('El placeholder devuelve SVG', ph.status === 200 && ph.headers.get('content-type')?.includes('svg'));
