@@ -147,6 +147,7 @@ function getPublicSettings() {
     tagline: s.tagline,
     slogan: s.slogan,
     hero_phrase: s.hero_phrase,
+    band_quote: s.band_quote,
     whatsapp: s.whatsapp,
     contact_email: s.contact_email,
     contact_phone: s.contact_phone,
@@ -728,6 +729,7 @@ function validateSettingsInput(data) {
   if (has('tagline')) out.tagline = cleanStr(data.tagline, 60);
   if (has('slogan')) out.slogan = cleanStr(data.slogan, 60);
   if (has('hero_phrase')) out.hero_phrase = cleanStr(data.hero_phrase, 300);
+  if (has('band_quote')) out.band_quote = cleanStr(data.band_quote, 300);
   if (has('description')) out.description = cleanStr(data.description, 5000);
   if (has('footer_text')) out.footer_text = cleanStr(data.footer_text, 300);
 

@@ -293,6 +293,13 @@ async function run() {
   await checkLayout('PC 1440x900', 1440, 900, false);
   await setViewport(1440, 900, false);
   await goto(BASE);
+  const bandQ = await evaluate(`(() => {
+    const b = document.querySelector('#band-quote');
+    return b ? b.textContent.replace(/\\s+/g, ' ').trim() : '';
+  })()`);
+  check('[Inicio] La banda dorada muestra la frase por defecto',
+    bandQ.includes('La elegancia no llama la atención') && bandQ.includes('la invita a pasar'),
+    bandQ);
   await openCheckout();
   let m = await measure();
   check('[PC] El formulario abre como modal', m.modalOpen);

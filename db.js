@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   tagline: 'Joyería',
   slogan: 'Tu Historia en oro',
   hero_phrase: 'La belleza eterna, forjada con luz y oro',
+  band_quote: '“La elegancia no llama la atención,\nla invita a pasar.”',
   whatsapp: '573105046188',
   contact_email: 'zhendor19@gmail.com',
   contact_phone: '',

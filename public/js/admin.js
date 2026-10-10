@@ -1355,6 +1355,7 @@ function fillSettingsForm(s) {
   $('#s-contact_email').value = s.contact_email || '';
   $('#s-address').value = s.address || '';
   $('#s-hero_phrase').value = s.hero_phrase || '';
+  $('#s-band_quote').value = s.band_quote || '';
   $('#s-description').value = s.description || '';
   $('#s-footer_text').value = s.footer_text || '';
   pendingLogo = null;
@@ -1394,6 +1395,7 @@ async function saveSettings(event) {
     contact_email: $('#s-contact_email').value.trim(),
     address: $('#s-address').value.trim(),
     hero_phrase: $('#s-hero_phrase').value.trim(),
+    band_quote: $('#s-band_quote').value.trim(),
     description: $('#s-description').value.trim(),
     footer_text: $('#s-footer_text').value.trim()
   };

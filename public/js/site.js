@@ -98,6 +98,12 @@ function applySettings() {
   setText('#footer-text', s.footer_text || '');
   setText('#about-text', s.description || '');
   setText('#hero-phrase', s.hero_phrase || '');
+  const DEFAULT_BAND_QUOTE = '“La elegancia no llama la atención,\nla invita a pasar.”';
+  const bq = $('#band-quote');
+  if (bq) {
+    const bqText = s.band_quote || DEFAULT_BAND_QUOTE;
+    bq.innerHTML = esc(bqText).replace(/\n/g, '<br>');
+  }
 
   if (s.logo) {
     for (const [imgSel, hideSel] of [['#brand-logo-img', '#brand-wordmark'], ['#footer-logo-img', '.footer-wordmark']]) {

@@ -244,6 +244,7 @@ async function run() {
       whatsapp: '573001112233',
       shipping_cost: '35000',
       hero_phrase: 'Frase de prueba',
+      band_quote: 'La elegancia tiene dos renglones.\nSegundo renglón',
       description: 'Descripción de prueba',
       footer_text: 'Pie de prueba',
       contact_email: 'hola@zhendor.test',
@@ -253,9 +254,12 @@ async function run() {
   });
   check('PUT ajustes guarda WhatsApp', settingsUpdate.status === 200 && settingsUpdate.body.settings.whatsapp === '573001112233');
   check('PUT ajustes guarda envío', settingsUpdate.body.settings.shipping_cost === '35000');
+  check('PUT ajustes guarda la frase de la banda dorada', settingsUpdate.body.settings.band_quote === 'La elegancia tiene dos renglones.\nSegundo renglón');
 
   const publicSettings = await json('/api/settings');
   check('Los ajustes se reflejan en público', publicSettings.body.settings.whatsapp === '573001112233');
+  check('La frase de la banda dorada llega en los ajustes públicos',
+    publicSettings.body.settings.band_quote === 'La elegancia tiene dos renglones.\nSegundo renglón');
 
   // 10b. Logotipo: subir y quitar
   const logoUp = await json('/api/admin/settings', {
